@@ -335,7 +335,8 @@ async function main() {
     console.log(`\nHealth: ${data.status} (uptime: ${Math.round(data.uptime)}s)`);
   } catch {
     console.error(`\nCannot reach ${BASE} — is the server running?`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   for (let i = 1; i <= ROUNDS; i++) {
@@ -351,4 +352,4 @@ async function main() {
   console.log(`   ${ROUNDS} rounds × 5 flows = ${ROUNDS * 5} user sessions`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(e); process.exitCode = 1; });
