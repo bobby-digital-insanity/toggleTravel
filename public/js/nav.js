@@ -1,5 +1,17 @@
 'use strict';
 
+// ── Datadog vendor badge ────────────────────────────────────────────────────
+(function injectVendorBadge() {
+  const navInner = document.querySelector('.nav-inner');
+  if (!navInner) return;
+  const badge = document.createElement('div');
+  badge.className = 'nav-vendor-badge';
+  badge.style.cssText = 'background:rgba(99,44,166,.08);border-color:#632CA6;color:#632CA6;';
+  badge.innerHTML = '<img src="/img/dd_icon_rgb.svg" alt="Datadog" style="height:22px;width:auto;display:block;"> Datadog';
+  navInner.appendChild(badge);
+}());
+// ───────────────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   // Active nav link
   const links = document.querySelectorAll('.nav-links a');
