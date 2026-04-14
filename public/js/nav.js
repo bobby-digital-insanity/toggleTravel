@@ -1,5 +1,17 @@
 'use strict';
 
+// ── Grafana vendor badge ────────────────────────────────────────────────────
+(function injectVendorBadge() {
+  const navInner = document.querySelector('.nav-inner');
+  if (!navInner) return;
+  const badge = document.createElement('div');
+  badge.className = 'nav-vendor-badge';
+  badge.style.cssText = 'background:#111217;border-color:#111217;padding:5px 12px;border-radius:8px;';
+  badge.innerHTML = '<img src="/img/Grafana_Labs_id6wAGcFfm_0.svg" alt="Grafana Labs" style="height:20px;width:auto;display:block;">';
+  navInner.appendChild(badge);
+}());
+// ───────────────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   // Active nav link
   const links = document.querySelectorAll('.nav-links a');
