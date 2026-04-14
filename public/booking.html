@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Your Trip — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .booking-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 32px;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    @media (max-width: 800px) { .booking-layout { grid-template-columns: 1fr; } }
+
+    .step-indicator {
+      display: flex;
+      gap: 0;
+      margin-bottom: 36px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: calc(50% + 14px);
+      right: calc(-50% + 14px);
+      top: 14px;
+      height: 2px;
+      background: var(--border);
+    }
+
+    .step.done::after, .step.active::after { background: var(--brand-primary); }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .78rem;
+      font-weight: 800;
+      background: var(--border);
+      color: var(--text-muted);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step.active .step-num { background: var(--brand-primary); color: white; }
+    .step.done .step-num { background: var(--success); color: white; }
+    .step-label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
+    .step.active .step-label { color: var(--brand-primary); }
+
+    .summary-card {
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      position: sticky;
+      top: 80px;
+    }
+
+    .summary-img { width: 100%; height: 180px; object-fit: cover; }
+    .summary-body { padding: 20px; }
+    .summary-line { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: .88rem; }
+    .summary-line:not(:last-child) { border-bottom: 1px solid var(--border); }
+    .summary-line strong { font-size: .95rem; }
+
+    .success-state {
+      text-align: center;
+      padding: 60px 24px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--success), #059669);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      margin: 0 auto 24px;
+      box-shadow: 0 8px 24px rgba(16,185,129,.3);
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <div class="container">
+      <h1>Book Your Trip</h1>
+      <p>You're just a few steps away from your next adventure</p>
+    </div>
+  </div>
+
+  <!-- Main booking flow -->
+  <div id="booking-flow">
+    <div class="booking-layout">
+      <!-- Left: form -->
+      <div>
+        <div class="step-indicator">
+          <div class="step active" id="step-1-ind">
+            <div class="step-num">1</div>
+            <div class="step-label">Trip Details</div>
+          </div>
+          <div class="step" id="step-2-ind">
+            <div class="step-num">2</div>
+            <div class="step-label">Contact Info</div>
+          </div>
+          <div class="step" id="step-3-ind">
+            <div class="step-num">3</div>
+            <div class="step-label">Confirm</div>
+          </div>
+        </div>
+
+        <!-- Step 1 -->
+        <div id="step-1">
+          <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:24px">Trip Details</h2>
+          <div class="form-group">
+            <label class="form-label">Number of travelers</label>
+            <select class="form-select" id="f-travelers">
+              <option value="1">1 traveler</option>
+              <option value="2" selected>2 travelers</option>
+              <option value="3">3 travelers</option>
+              <option value="4">4 travelers</option>
+              <option value="5">5 travelers</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group">
+              <label class="form-label">Departure date</label>
+              <input type="date" class="form-input" id="f-departure">
+              <div class="form-error" id="err-departure"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Return date</label>
+              <input type="date" class="form-input" id="f-return">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="goStep(2)" style="margin-top:8px">
+            Continue →
+          </button>
+        </div>
+
+        <!-- Step 2 -->
+        <div id="step-2" style="display:none">
+          <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:24px">Contact Information</h2>
+          <div class="form-group">
+            <label class="form-label">Email address</label>
+            <input type="email" class="form-input" id="f-email" placeholder="you@example.com">
+            <div class="form-error" id="err-email"></div>
+          </div>
+          <div style="background:rgba(0,87,184,.04);border:1px solid rgba(0,87,184,.15);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:20px;font-size:.85rem;color:var(--text-muted)">
+            🔒 Your email is only used for booking confirmation. No spam, ever.
+          </div>
+          <div style="display:flex;gap:12px">
+            <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
+            <button class="btn btn-primary btn-lg" onclick="goStep(3)">Review Booking →</button>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div id="step-3" style="display:none">
+          <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:24px">Confirm Your Booking</h2>
+          <div id="booking-review" style="background:var(--surface-2);border-radius:var(--radius);padding:20px;margin-bottom:24px;font-size:.9rem;line-height:2"></div>
+          <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:24px;font-size:.85rem">
+            ⚡ Your booking is processed in real-time. Payment will be charged upon confirmation.
+          </div>
+          <div id="booking-error" style="display:none" class="alert alert-error" style="margin-bottom:16px"></div>
+          <div style="display:flex;gap:12px;align-items:center">
+            <button class="btn btn-outline" onclick="goStep(2)">← Back</button>
+            <button class="btn btn-primary btn-lg" id="confirm-btn" onclick="confirmBooking()">
+              Confirm & Pay →
+            </button>
+            <span id="confirm-spinner" style="display:none"><div class="spinner"></div></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: summary -->
+      <div>
+        <div class="summary-card">
+          <img id="summary-img" src="" alt="" class="summary-img" style="display:none">
+          <div class="summary-body">
+            <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:10px">Booking Summary</div>
+            <div id="summary-dest" style="font-weight:800;font-size:1.1rem;margin-bottom:16px">Loading…</div>
+            <div class="summary-line"><span>Travelers</span><strong id="sum-travelers">--</strong></div>
+            <div class="summary-line"><span>Departure</span><strong id="sum-departure">--</strong></div>
+            <div class="summary-line"><span>Return</span><strong id="sum-return">--</strong></div>
+            <div class="summary-line"><span>Price per person</span><strong id="sum-unit-price">--</strong></div>
+            <div class="summary-line" style="background:var(--surface-2);margin:0 -20px;padding:12px 20px;border-top:1px solid var(--border)">
+              <span style="font-weight:700">Total</span>
+              <strong style="color:var(--brand-primary);font-size:1.15rem" id="sum-total">--</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success state -->
+  <div id="success-state" style="display:none">
+    <div class="success-state">
+      <div class="success-icon">✓</div>
+      <h2 style="font-size:2rem;font-weight:900;letter-spacing:-.5px;margin-bottom:12px">You're booked!</h2>
+      <p style="color:var(--text-muted);font-size:1.05rem;margin-bottom:8px">Your adventure to <strong id="success-dest"></strong> is confirmed.</p>
+      <div id="success-booking-id" style="font-family:monospace;font-size:1.1rem;font-weight:700;color:var(--brand-primary);background:rgba(0,87,184,.08);padding:10px 20px;border-radius:var(--radius-sm);margin:20px auto;display:inline-block"></div>
+      <p id="success-trace" style="font-size:.78rem;color:var(--text-muted);font-family:monospace;margin-bottom:32px"></p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a href="/bookings.html" class="btn btn-primary">View My Trips</a>
+        <a href="/search.html" class="btn btn-outline">Book Another Trip</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-bottom" style="max-width:1200px;margin:0 auto;padding:24px">
+      <span>© 2026 Toggle Travel</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const destinationId = params.get('destinationId');
+    let destData = null;
+    let currentStep = 1;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!destinationId) { location.href = '/search.html'; return; }
+
+      // Pre-fill travelers/dates from URL
+      if (params.get('travelers')) document.getElementById('f-travelers').value = params.get('travelers');
+      if (params.get('departure')) document.getElementById('f-departure').value = params.get('departure');
+
+      // Default dates
+      const dep = new Date(); dep.setDate(dep.getDate() + 30);
+      const ret = new Date(); ret.setDate(ret.getDate() + 37);
+      if (!document.getElementById('f-departure').value)
+        document.getElementById('f-departure').value = dep.toISOString().split('T')[0];
+      if (!document.getElementById('f-return').value)
+        document.getElementById('f-return').value = ret.toISOString().split('T')[0];
+
+      try {
+        const data = await api.get(`/api/destinations/${destinationId}`);
+        destData = data.destination;
+        document.getElementById('summary-dest').textContent = destData.name;
+        const img = document.getElementById('summary-img');
+        img.src = destData.heroImage;
+        img.style.display = '';
+        updateSummary();
+      } catch (err) {
+        document.getElementById('summary-dest').textContent = 'Destination not found';
+      }
+
+      ['f-travelers', 'f-departure', 'f-return'].forEach((id) => {
+        document.getElementById(id).addEventListener('change', updateSummary);
+      });
+    });
+
+    function updateSummary() {
+      if (!destData) return;
+      const travelers = parseInt(document.getElementById('f-travelers').value, 10);
+      document.getElementById('sum-travelers').textContent = `${travelers} traveler${travelers > 1 ? 's' : ''}`;
+      document.getElementById('sum-departure').textContent = document.getElementById('f-departure').value || '--';
+      document.getElementById('sum-return').textContent = document.getElementById('f-return').value || '--';
+      document.getElementById('sum-unit-price').textContent = `$${destData.basePrice.toLocaleString()}`;
+      document.getElementById('sum-total').textContent = `$${(destData.basePrice * travelers).toLocaleString()}`;
+    }
+
+    function goStep(n) {
+      // Validate
+      if (n === 2) {
+        const dep = document.getElementById('f-departure').value;
+        if (!dep) { document.getElementById('err-departure').textContent = 'Please select a departure date'; return; }
+        document.getElementById('err-departure').textContent = '';
+      }
+      if (n === 3) {
+        const email = document.getElementById('f-email').value;
+        if (!email || !email.includes('@')) { document.getElementById('err-email').textContent = 'Please enter a valid email'; return; }
+        document.getElementById('err-email').textContent = '';
+        buildReview();
+      }
+
+      document.getElementById(`step-${currentStep}`).style.display = 'none';
+      document.getElementById(`step-${n}`).style.display = '';
+
+      // Update indicators
+      for (let i = 1; i <= 3; i++) {
+        const ind = document.getElementById(`step-${i}-ind`);
+        ind.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+        ind.querySelector('.step-num').textContent = i < n ? '✓' : i;
+      }
+
+      currentStep = n;
+      updateSummary();
+    }
+
+    function buildReview() {
+      if (!destData) return;
+      const travelers = document.getElementById('f-travelers').value;
+      const departure = document.getElementById('f-departure').value;
+      const ret = document.getElementById('f-return').value;
+      const email = document.getElementById('f-email').value;
+      const total = destData.basePrice * parseInt(travelers);
+
+      document.getElementById('booking-review').innerHTML = `
+        <div><strong>Destination:</strong> ${destData.name}</div>
+        <div><strong>Travelers:</strong> ${travelers}</div>
+        <div><strong>Departure:</strong> ${departure}</div>
+        <div><strong>Return:</strong> ${ret || 'TBD'}</div>
+        <div><strong>Contact:</strong> ${email}</div>
+        <div><strong>Total charge:</strong> <span style="color:var(--brand-primary);font-weight:800">$${total.toLocaleString()}</span></div>
+      `;
+    }
+
+    async function confirmBooking() {
+      const btn = document.getElementById('confirm-btn');
+      const spinner = document.getElementById('confirm-spinner');
+      const errorEl = document.getElementById('booking-error');
+
+      btn.disabled = true;
+      btn.textContent = 'Processing…';
+      spinner.style.display = '';
+      errorEl.style.display = 'none';
+
+      try {
+        const data = await api.post('/api/bookings', {
+          destinationId,
+          travelers: parseInt(document.getElementById('f-travelers').value, 10),
+          departureDate: document.getElementById('f-departure').value,
+          returnDate: document.getElementById('f-return').value,
+          contactEmail: document.getElementById('f-email').value,
+        });
+
+        const booking = data.booking;
+
+        // Save to local booking history
+        const history = JSON.parse(localStorage.getItem('bookingHistory') || '[]');
+        history.unshift({ id: booking.id, destinationName: booking.destinationName, date: booking.createdAt });
+        localStorage.setItem('bookingHistory', JSON.stringify(history.slice(0, 20)));
+
+        // Show success
+        document.getElementById('booking-flow').style.display = 'none';
+        document.getElementById('success-state').style.display = '';
+        document.getElementById('success-dest').textContent = booking.destinationName;
+        document.getElementById('success-booking-id').textContent = `Booking ID: ${booking.id}`;
+
+        const traceId = document.getElementById('trace-banner')?.innerHTML?.match(/([a-f0-9]{32})/)?.[1];
+        if (traceId) {
+          document.getElementById('success-trace').textContent = `Trace: ${traceId}`;
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Confirm & Pay →';
+        spinner.style.display = 'none';
+        errorEl.style.display = '';
+        errorEl.innerHTML = err.status === 402
+          ? '💳 Payment authorization declined. Please try again — this is a simulated 5% failure rate for demo purposes.'
+          : `⚠ Booking failed: ${err.message}`;
+      }
+    }
+  </script>
+</body>
+</html>

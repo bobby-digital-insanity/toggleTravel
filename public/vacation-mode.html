@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vacation Mode — Toggle Travel AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/vacation-mode.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="return false">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="vm-hero">
+    <div class="vm-hero-content container">
+      <div class="vm-hero-icon">✈</div>
+      <h1>Toggle Vacation Mode</h1>
+      <p>Flip the switch. Our AI travel concierge will analyze your preferences and craft a fully personalized travel experience — curated recommendations, your travel persona, and an adventure vibe just for you.</p>
+    </div>
+  </div>
+
+  <!-- Toggle switch -->
+  <div class="vm-toggle-section">
+    <div class="vm-toggle-wrapper">
+      <div class="vm-toggle-label">Vacation Mode</div>
+      <label class="vm-switch">
+        <input type="checkbox" id="vm-toggle">
+        <div class="vm-switch-track"></div>
+        <div class="vm-switch-thumb">🌴</div>
+      </label>
+      <div class="vm-status-text" id="vm-status-text">OFF</div>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="vm-loading" style="display:none">
+    <div class="vm-loading">
+      <div class="vm-loading-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <p>Your AI travel concierge is thinking…</p>
+    </div>
+  </div>
+
+  <!-- AI Response section -->
+  <div id="vm-response" style="display:none">
+    <div style="max-width:900px;margin:0 auto;padding:40px 24px 0">
+
+      <!-- Welcome card (shown when ON) -->
+      <div id="vm-welcome-card" style="display:none" class="vm-welcome-card">
+        <div class="vm-persona" id="vm-persona">✈ World Explorer</div>
+        <div class="vm-welcome-text" id="vm-welcome-text"></div>
+        <div class="vm-vibe" id="vm-vibe"></div>
+      </div>
+
+      <!-- Recommended destinations (shown when ON) -->
+      <div id="vm-recs-section" style="display:none;margin-bottom:40px">
+        <div class="vm-recs-header">
+          <h3>Your Personalized Picks</h3>
+          <p>Curated by AI based on your travel style</p>
+        </div>
+        <div class="grid-3" id="vm-recs-grid"></div>
+      </div>
+
+      <!-- Farewell (shown when turning OFF) -->
+      <div id="vm-farewell" style="display:none" class="vm-farewell">
+        <div class="vm-farewell-icon">👋</div>
+        <h3>Until next time!</h3>
+        <p id="vm-farewell-text"></p>
+        <div style="margin-top:24px">
+          <a href="/search.html" class="btn btn-primary">Browse Destinations</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Preferences (shown when OFF) -->
+  <div id="vm-prefs" class="vm-prefs">
+    <h3>Customize your experience <span style="font-size:.85rem;font-weight:500;color:var(--text-muted)">(optional)</span></h3>
+
+    <div class="prefs-grid">
+      <div class="form-group">
+        <label class="form-label">Budget per person</label>
+        <select class="form-select" id="pref-budget">
+          <option value="flexible">Flexible</option>
+          <option value="budget">Budget (under $1,500)</option>
+          <option value="mid">Mid-range ($1,500–$3,000)</option>
+          <option value="luxury">Luxury ($3,000+)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Trip duration</label>
+        <select class="form-select" id="pref-duration">
+          <option value="flexible">Flexible</option>
+          <option value="weekend">Weekend (2–4 days)</option>
+          <option value="week">One week (5–7 days)</option>
+          <option value="twoweeks">Two weeks (10–14 days)</option>
+          <option value="month">Extended (3+ weeks)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Travel style</label>
+      <div class="style-chips">
+        <div class="style-chip" data-value="adventure">🏔 Adventure</div>
+        <div class="style-chip" data-value="culture">🎭 Culture</div>
+        <div class="style-chip" data-value="beach">🏖 Beach</div>
+        <div class="style-chip" data-value="food">🍜 Food & Wine</div>
+        <div class="style-chip" data-value="wellness">🧘 Wellness</div>
+        <div class="style-chip" data-value="photography">📷 Photography</div>
+        <div class="style-chip" data-value="luxury">💎 Luxury</div>
+        <div class="style-chip" data-value="backpacking">🎒 Backpacking</div>
+      </div>
+    </div>
+
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:16px 20px;margin-top:8px">
+      <div style="font-size:.82rem;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">What Vacation Mode does</div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px">
+        <li style="font-size:.88rem;color:var(--text-muted);display:flex;gap:8px"><span>🤖</span> Calls Claude AI with your preferences</li>
+        <li style="font-size:.88rem;color:var(--text-muted);display:flex;gap:8px"><span>📊</span> Generates a distributed trace with AI token metrics</li>
+        <li style="font-size:.88rem;color:var(--text-muted);display:flex;gap:8px"><span>🗺</span> Recommends 3 personalized destinations</li>
+        <li style="font-size:.88rem;color:var(--text-muted);display:flex;gap:8px"><span>🔍</span> Every call is traced, logged, and measured</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Observability info panel -->
+  <div style="background:var(--surface-2);border-top:1px solid var(--border);padding:48px 24px">
+    <div style="max-width:900px;margin:0 auto">
+      <div class="eyebrow" style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--brand-primary);margin-bottom:12px">Observability Demo</div>
+      <h3 style="font-size:1.4rem;font-weight:800;margin-bottom:16px">Every toggle is fully traced</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+        <div style="background:white;border-radius:var(--radius-sm);padding:16px;border:1px solid var(--border)">
+          <div style="font-size:1.5rem;margin-bottom:8px">🔭</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">Distributed Trace</div>
+          <div style="font-size:.8rem;color:var(--text-muted)">Root span + AI inference child span with token counts</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius-sm);padding:16px;border:1px solid var(--border)">
+          <div style="font-size:1.5rem;margin-bottom:8px">📝</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">Structured Logs</div>
+          <div style="font-size:.8rem;color:var(--text-muted)">JSON log with trace_id, model, duration_ms, token counts</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius-sm);padding:16px;border:1px solid var(--border)">
+          <div style="font-size:1.5rem;margin-bottom:8px">📊</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">Metrics</div>
+          <div style="font-size:.8rem;color:var(--text-muted)">vacation_mode.toggled counter + ai.tokens.used counter</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius-sm);padding:16px;border:1px solid var(--border)">
+          <div style="font-size:1.5rem;margin-bottom:8px">⚡</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">AI Latency</div>
+          <div style="font-size:.8rem;color:var(--text-muted)">vacation_mode.ai_duration histogram (ms)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel</span>
+      <span>Powered by OpenTelemetry + Claude AI</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="/js/vacation-mode.js"></script>
+</body>
+</html>

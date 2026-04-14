@@ -1,0 +1,306 @@
+/* Vacation Mode page specific styles */
+
+.vm-hero {
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #0f3460 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.vm-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(245,158,11,.15) 0%, transparent 70%);
+}
+
+.vm-hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  color: white;
+  padding: 64px 24px;
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.vm-hero-icon {
+  font-size: 3.5rem;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 0 20px rgba(245,158,11,.6));
+}
+
+.vm-hero-content h1 {
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: -1px;
+  margin-bottom: 12px;
+}
+
+.vm-hero-content p {
+  font-size: 1.1rem;
+  opacity: .75;
+  line-height: 1.7;
+}
+
+/* ── Toggle Switch ── */
+.vm-toggle-section {
+  text-align: center;
+  padding: 60px 24px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+}
+
+.vm-toggle-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.vm-toggle-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  font-size: .85rem;
+}
+
+.vm-switch {
+  position: relative;
+  width: 120px;
+  height: 60px;
+  cursor: pointer;
+}
+
+.vm-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.vm-switch-track {
+  position: absolute;
+  inset: 0;
+  background: #e2e8f0;
+  border-radius: 999px;
+  transition: background .4s, box-shadow .4s;
+}
+
+.vm-switch input:checked + .vm-switch-track {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 0 24px rgba(245,158,11,.5);
+}
+
+.vm-switch-thumb {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 48px;
+  height: 48px;
+  background: white;
+  border-radius: 50%;
+  transition: transform .4s cubic-bezier(.34, 1.56, .64, 1);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+.vm-switch input:checked ~ .vm-switch-thumb {
+  transform: translateX(60px);
+}
+
+.vm-status-text {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  transition: color .4s;
+}
+
+.vm-status-text.on { color: var(--vacation-glow); }
+
+/* ── Preferences form ── */
+.vm-prefs {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.vm-prefs h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+
+.prefs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .prefs-grid { grid-template-columns: 1fr; }
+}
+
+.style-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.style-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: .85rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  background: white;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+  user-select: none;
+}
+
+.style-chip:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+.style-chip.selected { border-color: var(--vacation-glow); color: var(--vacation-glow); background: rgba(245,158,11,.05); }
+
+/* ── AI Response ── */
+.vm-response {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px 60px;
+  display: none;
+}
+
+.vm-response.visible { display: block; }
+
+.vm-welcome-card {
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1.5px solid rgba(245,158,11,.3);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.vm-welcome-card::before {
+  content: '✈';
+  position: absolute;
+  right: 24px;
+  top: 24px;
+  font-size: 3rem;
+  opacity: .12;
+}
+
+.vm-persona {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245,158,11,.15);
+  color: #92400e;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 14px;
+}
+
+.vm-welcome-text {
+  font-size: 1.1rem;
+  color: #451a03;
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+.vm-vibe {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(245,158,11,.2);
+  font-size: .9rem;
+  color: #78350f;
+  font-style: italic;
+}
+
+/* ── Typing effect ── */
+.typing-cursor::after {
+  content: '|';
+  animation: blink-cursor .7s step-end infinite;
+  color: var(--vacation-glow);
+  font-weight: 300;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── AI loading state ── */
+.vm-loading {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.vm-loading-dots {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.vm-loading-dots span {
+  width: 10px;
+  height: 10px;
+  background: var(--vacation-glow);
+  border-radius: 50%;
+  animation: bounce-dot .8s ease-in-out infinite;
+}
+
+.vm-loading-dots span:nth-child(2) { animation-delay: .16s; }
+.vm-loading-dots span:nth-child(3) { animation-delay: .32s; }
+
+@keyframes bounce-dot {
+  0%, 100% { transform: translateY(0); opacity: .5; }
+  50% { transform: translateY(-8px); opacity: 1; }
+}
+
+.vm-loading p { color: var(--text-muted); font-size: .95rem; }
+
+/* ── Recommended destinations ── */
+.vm-recs-header {
+  margin-bottom: 20px;
+}
+
+.vm-recs-header h3 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -.3px;
+}
+
+.vm-recs-header p {
+  color: var(--text-muted);
+  font-size: .9rem;
+  margin-top: 4px;
+}
+
+/* ── Farewell state ── */
+.vm-farewell {
+  max-width: 600px;
+  margin: 40px auto;
+  text-align: center;
+  padding: 0 24px 60px;
+}
+
+.vm-farewell-icon { font-size: 3rem; margin-bottom: 16px; }
+.vm-farewell h3 { font-size: 1.4rem; font-weight: 800; margin-bottom: 12px; }
+.vm-farewell p { color: var(--text-muted); font-size: 1rem; line-height: 1.7; }

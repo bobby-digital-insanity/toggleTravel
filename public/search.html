@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Destinations — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <div class="container">
+      <h1>Explore Destinations</h1>
+      <p>Discover your next adventure from our curated collection</p>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="container">
+      <!-- Search form -->
+      <div style="background:white;border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm);border:1px solid var(--border);margin-bottom:40px">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+          <div class="search-field" style="flex:2;min-width:200px">
+            <label>Search</label>
+            <input type="text" id="search-q" placeholder="Destination, activity, or keyword…">
+          </div>
+          <div class="search-field">
+            <label>Region</label>
+            <select id="search-region">
+              <option value="">All regions</option>
+              <option value="asia">Asia</option>
+              <option value="europe">Europe</option>
+              <option value="americas">Americas</option>
+              <option value="oceania">Oceania</option>
+            </select>
+          </div>
+          <div class="search-field">
+            <label>Max Price (USD)</label>
+            <input type="number" id="search-max-price" placeholder="5000" min="500" step="100">
+          </div>
+          <div class="search-field">
+            <label>Departure</label>
+            <input type="date" id="search-date">
+          </div>
+          <button class="btn btn-primary" id="search-btn" onclick="runSearch()">
+            🔍 Search
+          </button>
+        </div>
+      </div>
+
+      <!-- Results header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+        <div id="results-header" style="color:var(--text-muted);font-size:.9rem"></div>
+        <div id="search-status" style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--text-muted)"></div>
+      </div>
+
+      <!-- Results grid -->
+      <div class="grid-3" id="results-grid">
+        <!-- Loaded by JS -->
+      </div>
+
+      <div id="no-results" style="display:none;text-align:center;padding:80px 0">
+        <div style="font-size:3rem;margin-bottom:16px">🔭</div>
+        <h3 style="font-weight:700;margin-bottom:8px">No destinations found</h3>
+        <p style="color:var(--text-muted)">Try adjusting your search criteria</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-bottom" style="max-width:1200px;margin:0 auto;padding:24px">
+      <span>© 2026 Toggle Travel</span>
+      <span>Powered by OpenTelemetry + Claude AI</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    let debounceTimer;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Pre-fill from URL params
+      const params = new URLSearchParams(location.search);
+      if (params.get('q')) document.getElementById('search-q').value = params.get('q');
+      if (params.get('region')) document.getElementById('search-region').value = params.get('region');
+      if (params.get('date')) document.getElementById('search-date').value = params.get('date');
+
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 30);
+      if (!document.getElementById('search-date').value) {
+        document.getElementById('search-date').value = tomorrow.toISOString().split('T')[0];
+      }
+
+      // Run initial search
+      runSearch();
+
+      // Debounced live search on text input
+      document.getElementById('search-q').addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(runSearch, 300);
+      });
+
+      document.getElementById('search-region').addEventListener('change', runSearch);
+      document.getElementById('search-q').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') runSearch();
+      });
+    });
+
+    async function runSearch() {
+      const q = document.getElementById('search-q').value.trim();
+      const region = document.getElementById('search-region').value;
+      const maxPrice = document.getElementById('search-max-price').value;
+      const date = document.getElementById('search-date').value;
+
+      const status = document.getElementById('search-status');
+      const grid = document.getElementById('results-grid');
+      const noResults = document.getElementById('no-results');
+      const header = document.getElementById('results-header');
+
+      status.innerHTML = '<div class="spinner"></div> Searching…';
+      grid.innerHTML = [1,2,3,4,5,6].map(() => `
+        <div class="card">
+          <div class="skeleton" style="height:220px"></div>
+          <div class="card-body">
+            <div class="skeleton" style="height:14px;width:60%;margin-bottom:10px"></div>
+            <div class="skeleton" style="height:20px;width:80%;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:14px;width:90%"></div>
+          </div>
+        </div>
+      `).join('');
+      noResults.style.display = 'none';
+
+      try {
+        const startTime = Date.now();
+        const data = await api.post('/api/search', {
+          query: q,
+          region: region || undefined,
+          maxPrice: maxPrice ? Number(maxPrice) : undefined,
+          departureDate: date,
+        });
+
+        const elapsed = Date.now() - startTime;
+        status.innerHTML = `<span style="color:var(--success)">✓</span> ${elapsed}ms`;
+        header.textContent = `${data.count} destination${data.count !== 1 ? 's' : ''} found`;
+
+        if (data.results.length === 0) {
+          grid.innerHTML = '';
+          noResults.style.display = '';
+          return;
+        }
+
+        grid.innerHTML = data.results.map((d) => `
+          <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">
+            <img src="${d.heroImage}" alt="${d.name}" class="card-img" loading="lazy"
+              onerror="this.src='https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=70'">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div class="card-region">${d.region}</div>
+                <span class="badge badge-amber">⏱ ${d.duration} days</span>
+              </div>
+              <div class="card-title">${d.name}</div>
+              <div class="card-tagline">${d.tagline}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                ${(d.activities || []).slice(0, 3).map((a) => `<span class="badge badge-blue">${a}</span>`).join('')}
+              </div>
+              <div class="card-footer">
+                <div class="card-price">
+                  $${(d.currentPrice || d.basePrice).toLocaleString()} <span>/ person</span>
+                  ${d.priceMultiplier && d.priceMultiplier !== 1 ?
+                    `<span class="badge badge-${d.priceMultiplier > 1 ? 'red' : 'green'}" style="margin-left:6px">
+                      ${d.priceMultiplier > 1 ? '▲' : '▼'} ${Math.abs(Math.round((d.priceMultiplier - 1) * 100))}%
+                    </span>` : ''}
+                </div>
+                <div class="card-rating">⭐ ${d.rating}</div>
+              </div>
+            </div>
+          </a>
+        `).join('');
+      } catch (err) {
+        status.innerHTML = `<span style="color:var(--error)">✗ Error</span>`;
+        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Search failed: ${err.message}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Trips — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <div class="container">
+      <h1>My Trips</h1>
+      <p>All your bookings in one place</p>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="container">
+      <div id="bookings-loading" class="loading-overlay">
+        <div class="spinner"></div> Loading your trips…
+      </div>
+
+      <div id="bookings-empty" style="display:none;text-align:center;padding:80px 0">
+        <div style="font-size:3.5rem;margin-bottom:16px">🧳</div>
+        <h2 style="font-weight:800;margin-bottom:8px">No trips yet</h2>
+        <p style="color:var(--text-muted);margin-bottom:28px">Your confirmed bookings will appear here.</p>
+        <a href="/search.html" class="btn btn-primary btn-lg">Explore Destinations</a>
+      </div>
+
+      <div id="bookings-list" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+          <div id="bookings-count" style="font-weight:700;font-size:1.1rem"></div>
+          <a href="/search.html" class="btn btn-outline btn-sm">+ Book Another Trip</a>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px" id="bookings-container"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-bottom" style="max-width:1200px;margin:0 auto;padding:24px">
+      <span>© 2026 Toggle Travel</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const data = await api.get('/api/bookings');
+        document.getElementById('bookings-loading').style.display = 'none';
+
+        if (data.bookings.length === 0) {
+          document.getElementById('bookings-empty').style.display = '';
+        } else {
+          document.getElementById('bookings-list').style.display = '';
+          document.getElementById('bookings-count').textContent =
+            `${data.bookings.length} booking${data.bookings.length > 1 ? 's' : ''}`;
+
+          document.getElementById('bookings-container').innerHTML =
+            data.bookings.map(bookingRow).join('');
+        }
+      } catch (err) {
+        document.getElementById('bookings-loading').innerHTML =
+          `<div class="alert alert-error">Failed to load bookings: ${err.message}</div>`;
+      }
+    });
+
+    function bookingRow(b) {
+      const date = new Date(b.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      return `
+        <div style="background:white;border-radius:var(--radius);border:1px solid var(--border);padding:24px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;box-shadow:var(--shadow-sm)">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px">${date}</div>
+            <div style="font-size:1.15rem;font-weight:800;margin-bottom:4px">${b.destinationName}</div>
+            <div style="font-size:.85rem;color:var(--text-muted)">
+              ${b.travelers} traveler${b.travelers > 1 ? 's' : ''} · Departs ${b.departureDate}
+              ${b.returnDate ? ` · Returns ${b.returnDate}` : ''}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:1.3rem;font-weight:900;color:var(--brand-primary)">$${b.totalAmount.toLocaleString()}</div>
+            <div style="margin-top:6px"><span class="badge badge-green">✓ ${b.status}</span></div>
+          </div>
+          <div style="text-align:right;min-width:140px">
+            <div style="font-size:.75rem;font-family:monospace;color:var(--text-muted);margin-bottom:8px">${b.id}</div>
+            <a href="/destination.html?id=${b.destinationId}" class="btn btn-outline btn-sm">View Destination</a>
+          </div>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

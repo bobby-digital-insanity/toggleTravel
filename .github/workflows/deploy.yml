@@ -1,0 +1,45 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+  # Allow manual deploys from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            sudo /usr/local/bin/deploy-toggle-travel.sh
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost/health)
+            if [ "$HTTP_STATUS" != "200" ]; then
+              echo "Health check failed: HTTP $HTTP_STATUS"
+              pm2 logs toggle-travel --lines 20 --nostream
+              exit 1
+            fi
+            echo "✅ Deployment verified — HTTP $HTTP_STATUS"
+            pm2 status

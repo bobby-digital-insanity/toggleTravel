@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Destination — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .dest-hero {
+      position: relative;
+      height: 480px;
+      overflow: hidden;
+      background: var(--brand-secondary);
+    }
+    .dest-hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: .7;
+    }
+    .dest-hero-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 40px 24px;
+      background: linear-gradient(transparent, rgba(0,0,0,.75));
+      color: white;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .dest-hero-overlay h1 { font-size: 2.8rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 8px; }
+    .dest-hero-overlay p { font-size: 1.1rem; opacity: .85; }
+    .dest-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    @media (max-width: 900px) { .dest-layout { grid-template-columns: 1fr; } }
+    .weather-card {
+      background: linear-gradient(135deg, #0ea5e9, var(--brand-primary));
+      color: white;
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .weather-card h4 { font-size: .8rem; text-transform: uppercase; letter-spacing: .5px; opacity: .75; margin-bottom: 10px; }
+    .weather-main { font-size: 2.8rem; font-weight: 900; }
+    .weather-detail { display: flex; gap: 16px; margin-top: 10px; font-size: .85rem; opacity: .8; }
+    .booking-card {
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      position: sticky;
+      top: 80px;
+    }
+    .booking-card .price-display { font-size: 2rem; font-weight: 900; color: var(--brand-primary); margin-bottom: 4px; }
+    .booking-card .price-note { font-size: .85rem; color: var(--text-muted); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <!-- Breadcrumb -->
+  <div style="background:var(--surface-2);border-bottom:1px solid var(--border);padding:12px 24px;font-size:.85rem">
+    <div style="max-width:1200px;margin:0 auto">
+      <a href="/">Home</a> › <a href="/search.html">Destinations</a> › <span id="breadcrumb-name" style="color:var(--text-muted)">Loading…</span>
+    </div>
+  </div>
+
+  <!-- Hero image -->
+  <div class="dest-hero" id="dest-hero">
+    <img id="dest-img" src="" alt="">
+    <div class="dest-hero-overlay">
+      <div id="dest-region" class="badge badge-blue" style="margin-bottom:12px"></div>
+      <h1 id="dest-name">Loading…</h1>
+      <p id="dest-tagline"></p>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div id="dest-content" style="display:none">
+    <div class="dest-layout">
+      <!-- Left: description + details -->
+      <div>
+        <div style="margin-bottom:32px">
+          <h2 style="font-size:1.5rem;font-weight:800;margin-bottom:16px">About this destination</h2>
+          <p id="dest-description" style="color:var(--text-muted);line-height:1.8;font-size:1rem"></p>
+        </div>
+
+        <div style="margin-bottom:32px">
+          <h3 style="font-size:1.15rem;font-weight:700;margin-bottom:14px">Top Activities</h3>
+          <div id="dest-activities" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+          <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:16px">
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px">Best Season</div>
+            <div id="dest-season" style="font-weight:700;font-size:1rem;text-transform:capitalize"></div>
+          </div>
+          <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:16px">
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px">Trip Duration</div>
+            <div id="dest-duration" style="font-weight:700;font-size:1rem"></div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:32px">
+          <h3 style="font-size:1.15rem;font-weight:700;margin-bottom:14px">Highlights</h3>
+          <ul id="dest-highlights" style="list-style:none;display:flex;flex-direction:column;gap:10px"></ul>
+        </div>
+      </div>
+
+      <!-- Right: booking card + weather -->
+      <div>
+        <div class="weather-card" id="weather-card" style="display:none">
+          <h4>Current Conditions</h4>
+          <div class="weather-main" id="weather-temp">--°C</div>
+          <div style="font-size:1rem;margin-top:4px;opacity:.9" id="weather-condition"></div>
+          <div class="weather-detail">
+            <span id="weather-humidity">-- humidity</span>
+            <span id="weather-wind">-- km/h wind</span>
+          </div>
+        </div>
+
+        <div class="booking-card">
+          <div class="price-display" id="booking-price">--</div>
+          <div class="price-note">per person, estimated base price</div>
+          <div class="form-group">
+            <label class="form-label">Number of travelers</label>
+            <select class="form-select" id="booking-travelers">
+              <option value="1">1 traveler</option>
+              <option value="2" selected>2 travelers</option>
+              <option value="3">3 travelers</option>
+              <option value="4">4 travelers</option>
+              <option value="5">5 travelers</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Departure date</label>
+            <input type="date" class="form-input" id="booking-departure">
+          </div>
+          <div id="booking-total" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:14px;margin-bottom:20px;font-weight:700;font-size:1.05rem;display:flex;justify-content:space-between">
+            <span>Estimated total</span><span id="total-price">--</span>
+          </div>
+          <button class="btn btn-primary" style="width:100%" id="book-btn" onclick="goToBooking()">
+            Book This Trip →
+          </button>
+          <p style="font-size:.78rem;color:var(--text-muted);text-align:center;margin-top:12px">Free cancellation • No hidden fees</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dest-loading" class="loading-overlay" style="min-height:300px">
+    <div class="spinner"></div> Loading destination…
+  </div>
+
+  <footer class="footer">
+    <div class="footer-bottom" style="max-width:1200px;margin:0 auto;padding:24px">
+      <span>© 2026 Toggle Travel</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get('id');
+    let destData = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!id) { location.href = '/search.html'; return; }
+
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 30);
+      document.getElementById('booking-departure').value = tomorrow.toISOString().split('T')[0];
+
+      try {
+        const data = await api.get(`/api/destinations/${id}`);
+        destData = data.destination;
+        renderDestination(destData);
+        document.getElementById('dest-loading').style.display = 'none';
+        document.getElementById('dest-content').style.display = '';
+        updateTotalPrice();
+      } catch (err) {
+        document.getElementById('dest-loading').innerHTML =
+          `<div class="alert alert-error">${err.status === 404 ? 'Destination not found.' : `Error: ${err.message}`}</div>`;
+      }
+    });
+
+    function renderDestination(d) {
+      document.title = `${d.name} — Toggle Travel`;
+      document.getElementById('breadcrumb-name').textContent = d.name;
+      document.getElementById('dest-img').src = d.heroImage;
+      document.getElementById('dest-img').alt = d.name;
+      document.getElementById('dest-region').textContent = d.region;
+      document.getElementById('dest-name').textContent = d.name;
+      document.getElementById('dest-tagline').textContent = d.tagline;
+      document.getElementById('dest-description').textContent = d.description;
+      document.getElementById('dest-season').textContent = `${d.bestSeason} · ${d.weatherSummary}`;
+      document.getElementById('dest-duration').textContent = `${d.duration} days recommended`;
+      document.getElementById('booking-price').textContent = `$${d.basePrice.toLocaleString()}`;
+
+      document.getElementById('dest-activities').innerHTML =
+        d.activities.map((a) => `<span class="badge badge-blue">${a}</span>`).join('');
+
+      document.getElementById('dest-highlights').innerHTML =
+        (d.highlights || []).map((h) => `
+          <li style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-radius:var(--radius-sm)">
+            <span style="color:var(--brand-accent);font-size:1.1rem">★</span>
+            <span style="font-size:.9rem">${h}</span>
+          </li>`).join('');
+
+      if (d.weather) {
+        const w = d.weather;
+        document.getElementById('weather-card').style.display = '';
+        document.getElementById('weather-temp').textContent = `${w.temperature}°C`;
+        document.getElementById('weather-condition').textContent = w.condition;
+        document.getElementById('weather-humidity').textContent = `${w.humidity}% humidity`;
+        document.getElementById('weather-wind').textContent = `${w.windSpeed} km/h wind`;
+      }
+    }
+
+    function updateTotalPrice() {
+      if (!destData) return;
+      const travelers = parseInt(document.getElementById('booking-travelers').value, 10);
+      const total = destData.basePrice * travelers;
+      document.getElementById('total-price').textContent = `$${total.toLocaleString()}`;
+    }
+
+    document.addEventListener('change', (e) => {
+      if (e.target.id === 'booking-travelers') updateTotalPrice();
+    });
+
+    function goToBooking() {
+      const travelers = document.getElementById('booking-travelers').value;
+      const departure = document.getElementById('booking-departure').value;
+      const params = new URLSearchParams({ destinationId: id, travelers, departure });
+      location.href = `/booking.html?${params}`;
+    }
+  </script>
+</body>
+</html>

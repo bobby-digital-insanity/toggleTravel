@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toggle Travel — Your Next Adventure Awaits</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content container">
+      <div class="hero-eyebrow">✈ 12 Curated Destinations Worldwide</div>
+      <h1>Your next <em>adventure</em><br>awaits you.</h1>
+      <p>Discover extraordinary destinations, book with confidence, and let our AI craft the perfect vacation plan — just for you.</p>
+
+      <div class="search-box">
+        <div class="search-field" style="flex:2; min-width:200px">
+          <label>Where to?</label>
+          <input type="text" id="hero-search" placeholder="Search destinations, activities…">
+        </div>
+        <div class="search-field">
+          <label>Region</label>
+          <select id="hero-region">
+            <option value="">All regions</option>
+            <option value="asia">Asia</option>
+            <option value="europe">Europe</option>
+            <option value="americas">Americas</option>
+            <option value="oceania">Oceania</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label>Departure</label>
+          <input type="date" id="hero-date">
+        </div>
+        <button class="btn btn-primary btn-lg" id="hero-search-btn" onclick="doHeroSearch()">
+          🔍 Search
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURED DESTINATIONS -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Featured Destinations</div>
+        <h2>Popular this season</h2>
+        <p>Handpicked journeys for every kind of traveler</p>
+      </div>
+      <div class="grid-3" id="destinations-grid">
+        <!-- Skeleton cards while loading -->
+        <div class="card"><div class="skeleton" style="height:220px"></div><div class="card-body"><div class="skeleton" style="height:14px;width:60%;margin-bottom:10px"></div><div class="skeleton" style="height:20px;width:80%;margin-bottom:8px"></div><div class="skeleton" style="height:14px;width:90%"></div></div></div>
+        <div class="card"><div class="skeleton" style="height:220px"></div><div class="card-body"><div class="skeleton" style="height:14px;width:60%;margin-bottom:10px"></div><div class="skeleton" style="height:20px;width:80%;margin-bottom:8px"></div><div class="skeleton" style="height:14px;width:90%"></div></div></div>
+        <div class="card"><div class="skeleton" style="height:220px"></div><div class="card-body"><div class="skeleton" style="height:14px;width:60%;margin-bottom:10px"></div><div class="skeleton" style="height:20px;width:80%;margin-bottom:8px"></div><div class="skeleton" style="height:14px;width:90%"></div></div></div>
+      </div>
+      <div style="text-align:center;margin-top:36px">
+        <a href="/search.html" class="btn btn-outline btn-lg">View all destinations →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- VACATION MODE CTA -->
+  <section style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:80px 24px;text-align:center">
+    <div class="container">
+      <div style="font-size:3rem;margin-bottom:20px">🌴</div>
+      <h2 style="color:white;font-size:2.2rem;font-weight:900;letter-spacing:-.5px;margin-bottom:12px">Try Toggle Vacation Mode</h2>
+      <p style="color:rgba(255,255,255,.7);font-size:1.1rem;max-width:480px;margin:0 auto 32px">Let our AI analyze your preferences and create a fully personalized travel experience — curated just for you.</p>
+      <a href="/vacation-mode.html" class="btn btn-vacation btn-lg">
+        ✨ Enable Vacation Mode
+      </a>
+    </div>
+  </section>
+
+  <!-- WHY TOGGLE TRAVEL -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header" style="text-align:center">
+        <div class="eyebrow">Why Toggle Travel</div>
+        <h2>Travel smarter, not harder</h2>
+      </div>
+      <div class="grid-3" style="text-align:center">
+        <div style="padding:32px 24px">
+          <div style="font-size:2.5rem;margin-bottom:16px">🗺</div>
+          <h3 style="font-weight:700;margin-bottom:8px">Curated Destinations</h3>
+          <p style="color:var(--text-muted);font-size:.9rem;line-height:1.7">Every destination is handpicked and described with the detail you need to make a confident booking decision.</p>
+        </div>
+        <div style="padding:32px 24px">
+          <div style="font-size:2.5rem;margin-bottom:16px">🤖</div>
+          <h3 style="font-weight:700;margin-bottom:8px">AI-Powered Planning</h3>
+          <p style="color:var(--text-muted);font-size:.9rem;line-height:1.7">Toggle Vacation Mode to unlock an AI travel concierge that learns your style and recommends the perfect trip.</p>
+        </div>
+        <div style="padding:32px 24px">
+          <div style="font-size:2.5rem;margin-bottom:16px">📊</div>
+          <h3 style="font-weight:700;margin-bottom:8px">Fully Observable</h3>
+          <p style="color:var(--text-muted);font-size:.9rem;line-height:1.7">Every click, search, and AI call is traced, logged, and measured — giving your ops team complete visibility.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="/search.html">Destinations</a></li>
+          <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+          <li><a href="/bookings.html">My Trips</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>Observability</h4>
+        <ul>
+          <li><a href="/health">Health Check</a></li>
+          <li><a href="/ready">Readiness Check</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel. Built for demos.</span>
+      <span>Powered by OpenTelemetry + Claude AI</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const data = await api.get('/api/destinations');
+        const featured = data.destinations.slice(0, 6);
+        const grid = document.getElementById('destinations-grid');
+        grid.innerHTML = featured.map((d) => `
+          <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">
+            <img src="${d.heroImage}" alt="${d.name}" class="card-img" loading="lazy"
+              onerror="this.src='https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=70'">
+            <div class="card-body">
+              <div class="card-region">${d.region}</div>
+              <div class="card-title">${d.name}</div>
+              <div class="card-tagline">${d.tagline}</div>
+              <div class="card-footer">
+                <div class="card-price">$${d.basePrice.toLocaleString()} <span>/ person</span></div>
+                <div class="card-rating">⭐ ${d.rating}</div>
+              </div>
+            </div>
+          </a>
+        `).join('');
+      } catch (err) {
+        document.getElementById('destinations-grid').innerHTML =
+          `<div class="alert alert-error" style="grid-column:1/-1">Failed to load destinations: ${err.message}</div>`;
+      }
+    });
+
+    function doHeroSearch() {
+      const q = document.getElementById('hero-search').value;
+      const region = document.getElementById('hero-region').value;
+      const date = document.getElementById('hero-date').value;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (region) params.set('region', region);
+      if (date) params.set('date', date);
+      location.href = `/search.html?${params}`;
+    }
+
+    document.getElementById('hero-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doHeroSearch();
+    });
+
+    // Pre-fill departure date
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 30);
+    document.getElementById('hero-date').value = tomorrow.toISOString().split('T')[0];
+  </script>
+</body>
+</html>
