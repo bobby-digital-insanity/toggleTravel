@@ -6,14 +6,8 @@
   if (!navInner) return;
   const badge = document.createElement('div');
   badge.className = 'nav-vendor-badge';
-  badge.style.setProperty('--vendor-color', '#1496FF');
-  badge.style.setProperty('--vendor-bg', 'rgba(20,150,255,.06)');
-  badge.innerHTML = `
-    <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M4 4h12l16 28H20L4 4z" fill="#1496FF"/>
-      <path d="M16 4h16L20 32H4L16 4z" fill="#1496FF" opacity=".45"/>
-    </svg>
-    Dynatrace`;
+  badge.style.cssText = 'background:#14162d;border-color:#14162d;';
+  badge.innerHTML = '<img src="/img/Dynatrace_Logo_monochrome_negative_horizontal.png" alt="Dynatrace" style="height:20px;width:auto;display:block;">';
   navInner.appendChild(badge);
 }());
 // ───────────────────────────────────────────────────────────────────────────
