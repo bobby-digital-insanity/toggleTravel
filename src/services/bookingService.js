@@ -8,19 +8,31 @@ const destinationService = require('./destinationService');
 // In-memory bookings store
 const bookings = new Map();
 
-async function create({ destinationId, travelers, departureDate, returnDate, contactEmail }) {
-  // Simulate inventory check
+async function create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId }) {
+  const bookingId = `bk-${uuidv4().slice(0, 8).toUpperCase()}`;
+  const logCtx = { booking_id: bookingId, destination_id: destinationId, session_id: sessionId };
+
+  // Stage 1: inventory check
+  const invStart = Date.now();
   await new Promise((r) => setTimeout(r, 50 + Math.random() * 50));
+  logger.info('booking_stage', { ...logCtx, stage: 'inventory_check', duration_ms: Date.now() - invStart });
 
   // Fetch destination to compute price
   const dest = await destinationService.getById(destinationId);
   const totalAmount = dest.basePrice * travelers;
 
-  // Authorize payment (may throw with 5% probability)
-  const payment = await authorizePayment(totalAmount, contactEmail);
+  // Stage 2: payment authorization
+  const payStart = Date.now();
+  let payment;
+  try {
+    payment = await authorizePayment(totalAmount, contactEmail);
+    logger.info('booking_stage', { ...logCtx, stage: 'payment_authorized', duration_ms: Date.now() - payStart, amount: totalAmount });
+  } catch (err) {
+    logger.warn('booking_stage', { ...logCtx, stage: 'payment_declined', duration_ms: Date.now() - payStart, amount: totalAmount, reason: err.message });
+    throw err;
+  }
 
-  // Persist booking
-  const bookingId = `bk-${uuidv4().slice(0, 8).toUpperCase()}`;
+  // Stage 3: confirm and persist
   const booking = {
     id: bookingId,
     destinationId,
@@ -40,9 +52,11 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
   logger.info('booking_created', {
     booking_id: bookingId,
     destination: dest.name,
+    destination_id: destinationId,
     travelers,
     total_amount: totalAmount,
     transaction_id: payment.transactionId,
+    session_id: sessionId,
   });
 
   return booking;
