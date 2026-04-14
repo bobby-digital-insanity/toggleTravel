@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Load Generator — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .demo-grid { grid-template-columns: 1fr; }
+    }
+
+    .control-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 88px;
+    }
+
+    .control-label {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .rounds-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .rounds-pill {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: white;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .rounds-pill:hover {
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+    }
+
+    .rounds-pill.selected {
+      background: var(--brand-primary);
+      border-color: var(--brand-primary);
+      color: white;
+    }
+
+    .btn-run {
+      width: 100%;
+      padding: 12px;
+      background: var(--brand-primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-run:hover:not(:disabled) { background: var(--brand-secondary); }
+    .btn-run:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-cancel {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      background: transparent;
+      color: var(--error);
+      border: 1.5px solid var(--error);
+      border-radius: var(--radius-sm);
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: none;
+    }
+
+    .btn-cancel:hover { background: var(--error); color: white; }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      font-size: .82rem;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-light);
+    }
+
+    .status-dot.running {
+      background: var(--success);
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+
+    .status-dot.done { background: var(--success); }
+    .status-dot.error { background: var(--error); }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .3; }
+    }
+
+    .flow-legend {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .78rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    /* Terminal */
+    .terminal-wrap {
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .terminal-bar {
+      background: #1e2030;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-size: .78rem;
+      color: #64748b;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+    }
+
+    .terminal-clear {
+      font-size: .72rem;
+      color: #475569;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: color var(--transition);
+    }
+
+    .terminal-clear:hover { color: #94a3b8; }
+
+    .terminal-body {
+      background: #0f172a;
+      padding: 20px;
+      min-height: 480px;
+      max-height: 640px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+      font-size: .82rem;
+      line-height: 1.7;
+    }
+
+    .terminal-placeholder {
+      color: #334155;
+      text-align: center;
+      padding: 80px 0;
+    }
+
+    .t-line { white-space: pre-wrap; word-break: break-all; }
+    .t-default  { color: #94a3b8; }
+    .t-success  { color: #4ade80; }
+    .t-warn     { color: #fbbf24; }
+    .t-fail     { color: #f87171; }
+    .t-sep      { color: #334155; }
+    .t-header   { color: #e2e8f0; font-weight: bold; }
+    .t-persona  { color: #818cf8; font-weight: 600; }
+    .t-note     { color: #64748b; font-style: italic; }
+    .t-done     { color: #4ade80; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+        <li><a href="/demo.html">Load Gen</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <div class="container">
+      <h1>Load Generator</h1>
+      <p>Simulate realistic user traffic to populate your observability dashboards</p>
+    </div>
+  </div>
+
+  <section class="section" style="padding-top:32px">
+    <div class="container">
+      <div class="demo-grid">
+
+        <!-- Controls -->
+        <div class="control-card">
+          <div class="control-label">Rounds</div>
+          <div class="rounds-pills">
+            <div class="rounds-pill" data-rounds="1">1</div>
+            <div class="rounds-pill selected" data-rounds="3">3</div>
+            <div class="rounds-pill" data-rounds="5">5</div>
+            <div class="rounds-pill" data-rounds="10">10</div>
+          </div>
+
+          <button class="btn-run" id="run-btn" onclick="startLoad()">
+            ▶ Generate Traffic
+          </button>
+          <button class="btn-cancel" id="cancel-btn" onclick="cancelLoad()">
+            ✕ Cancel
+          </button>
+
+          <div class="status-row">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Ready</span>
+          </div>
+
+          <div class="flow-legend">
+            <div class="control-label" style="margin-bottom:12px">Flows per round</div>
+            <div class="legend-item"><span>🛍</span> Window Shopper × 2</div>
+            <div class="legend-item"><span>🚪</span> Abandoned Checkout × 1</div>
+            <div class="legend-item"><span>✅</span> Complete Booking × 1</div>
+            <div class="legend-item"><span>✈</span> Vacation Mode × 1</div>
+            <div class="legend-item"><span>⚠️</span> Error Spike × 1</div>
+          </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="terminal-wrap">
+          <div class="terminal-bar">
+            <div class="terminal-dot" style="background:#ff5f57"></div>
+            <div class="terminal-dot" style="background:#ffbd2e"></div>
+            <div class="terminal-dot" style="background:#28c840"></div>
+            <span class="terminal-title">toggle-travel — load generator</span>
+            <button class="terminal-clear" onclick="clearOutput()">clear</button>
+          </div>
+          <div class="terminal-body" id="terminal">
+            <div class="terminal-placeholder" id="placeholder">
+              Select rounds and click Generate Traffic to begin.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-bottom" style="max-width:1200px;margin:0 auto;padding:24px">
+      <span>© 2026 Toggle Travel</span>
+      <span>Powered by Claude AI</span>
+    </div>
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    let selectedRounds = 3;
+
+    // Rounds pill selection
+    document.querySelectorAll('.rounds-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.rounds-pill').forEach((p) => p.classList.remove('selected'));
+        pill.classList.add('selected');
+        selectedRounds = parseInt(pill.dataset.rounds);
+      });
+    });
+
+    function setStatus(state, text) {
+      const dot = document.getElementById('status-dot');
+      dot.className = `status-dot ${state}`;
+      document.getElementById('status-text').textContent = text;
+    }
+
+    function classifyLine(line) {
+      if (line.includes('✓')) return 't-success';
+      if (line.includes('⚠')) return 't-warn';
+      if (line.includes('✗')) return 't-fail';
+      if (line.includes('✅')) return 't-done';
+      if (line.includes('❌')) return 't-fail';
+      if (line.match(/^─+$/)) return 't-sep';
+      if (line.match(/^Round \d/)) return 't-header';
+      if (line.match(/^\s+\[.+\]/)) return 't-persona';
+      if (line.includes('→') || line.includes('walked away') || line.includes('closed the tab')) return 't-note';
+      if (line.startsWith('Toggle Travel') || line.startsWith('Health:') || line.startsWith('Host:') || line.startsWith('Rounds:')) return 't-header';
+      if (line.startsWith('Pausing') || line.includes('complete!')) return 't-done';
+      return 't-default';
+    }
+
+    function appendLine(line, isError = false) {
+      const terminal = document.getElementById('terminal');
+      const placeholder = document.getElementById('placeholder');
+      if (placeholder) placeholder.remove();
+
+      const div = document.createElement('div');
+      div.className = `t-line ${isError ? 't-fail' : classifyLine(line)}`;
+      div.textContent = line;
+      terminal.appendChild(div);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function clearOutput() {
+      const terminal = document.getElementById('terminal');
+      terminal.innerHTML = '<div class="terminal-placeholder" id="placeholder">Select rounds and click Generate Traffic to begin.</div>';
+      setStatus('', 'Ready');
+    }
+
+    async function startLoad() {
+      const runBtn = document.getElementById('run-btn');
+      const cancelBtn = document.getElementById('cancel-btn');
+
+      runBtn.disabled = true;
+      cancelBtn.style.display = 'block';
+      setStatus('running', 'Running…');
+
+      // Clear old output
+      const terminal = document.getElementById('terminal');
+      terminal.innerHTML = '';
+
+      try {
+        const response = await fetch('/api/demo/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rounds: selectedRounds, pause: 3 }),
+        });
+
+        if (response.status === 409) {
+          appendLine('⚠ Load generation is already running on the server.');
+          setStatus('warn', 'Already running');
+          runBtn.disabled = false;
+          cancelBtn.style.display = 'none';
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === 'log') appendLine(msg.line, msg.error);
+              if (msg.type === 'done') {
+                const success = msg.code === 0;
+                setStatus(success ? 'done' : 'error', success ? `Complete — ${msg.rounds} rounds` : 'Finished with errors');
+              }
+            } catch { /* malformed line */ }
+          }
+        }
+      } catch (err) {
+        appendLine(`✗ Connection error: ${err.message}`, true);
+        setStatus('error', 'Error');
+      } finally {
+        runBtn.disabled = false;
+        cancelBtn.style.display = 'none';
+      }
+    }
+
+    async function cancelLoad() {
+      try {
+        await fetch('/api/demo/seed', { method: 'DELETE' });
+        appendLine('— Cancelled by user');
+        setStatus('', 'Cancelled');
+      } catch (err) {
+        appendLine(`✗ Cancel failed: ${err.message}`, true);
+      }
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    // Check if already running on page load
+    fetch('/api/demo/status').then((r) => r.json()).then((s) => {
+      if (s.running) setStatus('running', `Running (started ${new Date(s.startedAt).toLocaleTimeString()})`);
+    });
+  </script>
+</body>
+</html>
