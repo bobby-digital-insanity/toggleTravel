@@ -36,6 +36,10 @@ jobs:
             echo "=== Installing dependencies ==="
             npm install --omit=dev
 
+            echo "=== Reloading Nginx config ==="
+            sudo cp deployment/nginx.conf /etc/nginx/conf.d/toggle-travel.conf
+            sudo nginx -t && sudo systemctl reload nginx
+
             echo "=== Reloading app ==="
             pm2 reload toggle-travel --update-env
 
@@ -44,7 +48,7 @@ jobs:
 
             echo "=== Health check (retrying up to 5x) ==="
             for i in 1 2 3 4 5; do
-              HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost/health)
+              HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health)
               if [ "$HTTP_STATUS" = "200" ]; then
                 echo "✅ Healthy — HTTP $HTTP_STATUS"
                 pm2 status
