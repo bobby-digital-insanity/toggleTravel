@@ -39,8 +39,10 @@ jobs:
             sudo cp deployment/nginx.conf /etc/nginx/conf.d/toggle-travel.conf
             sudo nginx -t && sudo systemctl reload nginx
 
-            echo "=== Reloading app ==="
-            pm2 startOrReload deployment/ecosystem.config.js --env production --update-env
+            echo "=== Restarting app ==="
+            pm2 delete toggle-travel || true
+            pm2 start deployment/ecosystem.config.js --env production
+            pm2 save
 
             echo "=== Waiting for workers to come up ==="
             sleep 5
