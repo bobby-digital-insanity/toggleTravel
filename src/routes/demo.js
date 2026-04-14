@@ -27,6 +27,8 @@ router.post('/seed', (req, res) => {
     res.write(JSON.stringify({ type, ...payload }) + '\n');
   }
 
+  send('log', { line: `Starting seed script: ${SEED_SCRIPT}` });
+
   const child = spawn(process.execPath, [
     SEED_SCRIPT,
     '--host', 'http://localhost:3000',
@@ -35,6 +37,13 @@ router.post('/seed', (req, res) => {
   ]);
 
   activeJob = { child, startedAt: new Date().toISOString(), rounds };
+
+  child.on('error', (err) => {
+    send('log', { line: `✗ Failed to start process: ${err.message}`, error: true });
+    send('done', { code: 1, rounds });
+    activeJob = null;
+    res.end();
+  });
 
   child.stdout.on('data', (data) => {
     const lines = data.toString().split('\n');
@@ -51,7 +60,7 @@ router.post('/seed', (req, res) => {
   });
 
   child.on('close', (code) => {
-    send('done', { code, rounds });
+    send('done', { code: code ?? 1, rounds });
     activeJob = null;
     res.end();
   });
