@@ -3,7 +3,7 @@ name: Deploy — Dynatrace EC2
 on:
   push:
     branches:
-      - main
+      - dynatrace
   workflow_dispatch:
 
 jobs:
@@ -25,9 +25,9 @@ jobs:
             set -e
             cd /var/www/toggle-travel
 
-            echo "=== Pulling latest code (main) ==="
+            echo "=== Pulling latest code (dynatrace) ==="
             git reset --hard HEAD
-            git pull origin main
+            git pull origin dynatrace
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev

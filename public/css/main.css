@@ -137,6 +137,29 @@ img { max-width: 100%; display: block; }
   background: currentColor;
 }
 
+/* Vendor badge — injected by nav.js on vendor branches */
+.nav-vendor-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: .75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1.5px solid var(--vendor-color, var(--border));
+  color: var(--vendor-color, var(--text-muted));
+  background: var(--vendor-bg, transparent);
+  letter-spacing: .2px;
+  text-transform: uppercase;
+}
+
+.nav-vendor-badge img {
+  height: 18px;
+  width: auto;
+  display: block;
+}
+
 .nav-vacation-badge.on .vacation-dot {
   animation: blink 1.5s ease-in-out infinite;
 }
