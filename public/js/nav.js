@@ -13,6 +13,14 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Inject Load Gen nav link if not already in the HTML
+  const navLinks = document.querySelector('.nav-links');
+  if (navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
+    const li = document.createElement('li');
+    li.innerHTML = '<a href="/demo.html">Load Gen</a>';
+    navLinks.appendChild(li);
+  }
+
   // Active nav link
   const links = document.querySelectorAll('.nav-links a');
   links.forEach((link) => {

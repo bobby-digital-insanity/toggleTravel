@@ -17,6 +17,7 @@ const destinationsRouter = require('./routes/destinations');
 const searchRouter = require('./routes/search');
 const bookingsRouter = require('./routes/bookings');
 const vacationModeRouter = require('./routes/vacationMode');
+const demoRouter = require('./routes/demo');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,6 +43,7 @@ app.use('/api/destinations', destinationsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/vacation-mode', vacationModeRouter);
+app.use('/api/demo', demoRouter);
 
 // SPA fallback for client-side routing
 app.get('*', (req, res) => {
