@@ -28,7 +28,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Request logging (bridges Winston + OTel)
+// Request logging
 app.use(requestLogger);
 
 // Static files

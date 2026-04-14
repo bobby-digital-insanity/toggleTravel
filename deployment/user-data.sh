@@ -10,12 +10,6 @@
 # SETUP CHECKLIST (do these BEFORE launching the EC2):
 #   □ SSM Parameter (SecureString): /toggle-travel/anthropic-api-key
 #       → Your Anthropic API key (sk-ant-...)
-#   □ SSM Parameter (String):       /toggle-travel/otel-endpoint
-#       → Your OTLP endpoint, e.g. https://api.honeycomb.io
-#         (use "disabled" to skip OTel export)
-#   □ SSM Parameter (String):       /toggle-travel/otel-headers
-#       → Any auth headers, e.g. x-honeycomb-team=YOUR_KEY
-#         (use "none" if not needed)
 #   □ EC2 IAM Role attached with policy:
 #       ssm:GetParameter on arn:aws:ssm:*:*:parameter/toggle-travel/*
 #   □ EC2 Security Group inbound rules:
@@ -79,8 +73,6 @@ get_ssm() {
 }
 
 ANTHROPIC_API_KEY=$(get_ssm "/toggle-travel/anthropic-api-key" "REPLACE_ME")
-OTEL_ENDPOINT=$(get_ssm "/toggle-travel/otel-endpoint" "disabled")
-OTEL_HEADERS=$(get_ssm "/toggle-travel/otel-headers" "none")
 
 # Build the .env file
 cat > "$APP_DIR/.env" << EOF
@@ -90,19 +82,7 @@ PORT=3000
 # Anthropic AI
 ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
 CLAUDE_MODEL=claude-opus-4-5
-
-# OpenTelemetry
-OTEL_SERVICE_NAME=toggle-travel
-OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,service.version=1.0.0
 EOF
-
-# Only add OTel endpoint if not disabled
-if [ "$OTEL_ENDPOINT" != "disabled" ]; then
-  echo "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_ENDPOINT" >> "$APP_DIR/.env"
-fi
-if [ "$OTEL_HEADERS" != "none" ]; then
-  echo "OTEL_EXPORTER_OTLP_HEADERS=$OTEL_HEADERS" >> "$APP_DIR/.env"
-fi
 
 cat >> "$APP_DIR/.env" << 'EOF'
 

@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Seed load script — fires synthetic traffic to warm up telemetry dashboards.
+ * Seed load script — fires synthetic traffic against the demo app.
  * Usage: node scripts/seed-load.js [--host http://localhost:3000] [--rounds 3]
  */
 
