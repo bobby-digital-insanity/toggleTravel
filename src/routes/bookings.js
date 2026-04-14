@@ -14,7 +14,7 @@ router.post('/', async (req, res, next) => {
       throw err;
     }
 
-    const booking = await bookingService.create({ destinationId, travelers, departureDate, returnDate, contactEmail });
+    const booking = await bookingService.create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId: req.sessionId });
     res.status(201).json({ booking });
   } catch (err) {
     next(err);
