@@ -1,36 +1,33 @@
-name: Deploy to EC2
+name: Deploy — LaunchDarkly EC2
 
 on:
   push:
     branches:
-      - main
-
-  # Allow manual deploys from the Actions tab
+      - launchdarkly
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy
+    name: Deploy to LaunchDarkly EC2
     runs-on: ubuntu-latest
 
     steps:
       - name: Deploy & Verify
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST_LD }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY_LD }}
           port: 22
           script: |
-            # Make npm/pm2 available regardless of how Node was installed
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
             set -e
             cd /var/www/toggle-travel
 
-            echo "=== Pulling latest code ==="
+            echo "=== Pulling latest code (launchdarkly) ==="
             git reset --hard HEAD
-            git pull origin main
+            git pull origin launchdarkly
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
