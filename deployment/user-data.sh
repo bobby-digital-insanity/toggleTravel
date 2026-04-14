@@ -29,7 +29,7 @@ set -euo pipefail
 exec > >(tee /var/log/toggle-travel-setup.log | logger -t toggle-travel-setup) 2>&1
 
 # ── CONFIGURE THESE ──────────────────────────────────────────────────────────
-GITHUB_REPO="YOUR_GITHUB_USERNAME/toggleTravel"   # <-- REPLACE THIS
+GITHUB_REPO="bobby-digital-insanity/toggleTravel"   # <-- REPLACE THIS
 APP_USER="ec2-user"
 APP_DIR="/var/www/toggle-travel"
 LOG_DIR="/var/log/toggle-travel"
