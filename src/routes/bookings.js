@@ -3,7 +3,6 @@
 const express = require('express');
 const router = express.Router();
 const bookingService = require('../services/bookingService');
-const metrics = require('../metrics');
 
 router.post('/', async (req, res, next) => {
   try {
@@ -24,7 +23,6 @@ router.post('/', async (req, res, next) => {
 
 router.get('/', (req, res) => {
   const all = bookingService.list();
-  metrics.httpRequestDuration.record(0, { route: '/api/bookings', method: 'GET' });
   res.json({ bookings: all });
 });
 

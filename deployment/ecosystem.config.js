@@ -3,7 +3,6 @@ module.exports = {
     {
       name: 'toggle-travel',
       script: 'src/server.js',
-      node_args: '--require ./src/instrumentation.js',
       instances: 2,
       exec_mode: 'cluster',
       max_memory_restart: '512M',
