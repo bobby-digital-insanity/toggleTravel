@@ -14,9 +14,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -25,7 +22,24 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            sudo /usr/local/bin/deploy-toggle-travel.sh
+            set -e
+
+            # Make npm/pm2 available — handles NodeSource and nvm installs
+            export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
+
+            cd /var/www/toggle-travel
+
+            echo "--- Pulling latest code ---"
+            git pull origin main
+
+            echo "--- Installing dependencies ---"
+            npm install --omit=dev
+
+            echo "--- Reloading app (zero downtime) ---"
+            pm2 reload toggle-travel --update-env
+
+            echo "--- Done ---"
+            pm2 status
 
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.3
@@ -38,8 +52,8 @@ jobs:
             HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost/health)
             if [ "$HTTP_STATUS" != "200" ]; then
               echo "Health check failed: HTTP $HTTP_STATUS"
-              pm2 logs toggle-travel --lines 20 --nostream
+              export PATH="/usr/local/bin:/usr/bin:$PATH"
+              pm2 logs toggle-travel --lines 30 --nostream
               exit 1
             fi
             echo "✅ Deployment verified — HTTP $HTTP_STATUS"
-            pm2 status
