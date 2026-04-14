@@ -25,6 +25,7 @@ router.post('/seed', (req, res) => {
 
   function send(type, payload = {}) {
     res.write(JSON.stringify({ type, ...payload }) + '\n');
+    if (typeof res.flush === 'function') res.flush(); // drain compression buffer
   }
 
   send('log', { line: `Starting seed script: ${SEED_SCRIPT}` });
