@@ -19,6 +19,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_DT }}
           port: 22
+          envs: LD_SDK_KEY=${{ secrets.LD_SDK_KEY_DT }},LD_CLIENT_SIDE_ID=${{ secrets.LD_CLIENT_SIDE_ID_DT }}
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -28,6 +29,10 @@ jobs:
             echo "=== Pulling latest code (dynatrace) ==="
             git reset --hard HEAD
             git pull origin dynatrace
+
+            echo "=== Injecting LaunchDarkly keys into .env ==="
+            sed -i "s|^LD_SDK_KEY=.*|LD_SDK_KEY=$LD_SDK_KEY|" .env || echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
+            sed -i "s|^LD_CLIENT_SIDE_ID=.*|LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID|" .env || echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
