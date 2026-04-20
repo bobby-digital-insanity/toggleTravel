@@ -17,6 +17,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
+    "launchdarkly-js-client-sdk": "^3.9.1",
     "uuid": "^11.0.3",
     "winston": "^3.17.0"
   },
