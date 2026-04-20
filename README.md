@@ -1,4 +1,4 @@
-# Toggle Travel
+# Toggle Travel — LaunchDarkly
 
 A demo travel booking app built to showcase observability tooling. The same application runs across multiple EC2 instances — each branch is instrumented with a different vendor so you can compare what each tool sees from identical traffic.
 
