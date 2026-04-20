@@ -10,6 +10,9 @@ jobs:
   deploy:
     name: Deploy to Datadog EC2
     runs-on: ubuntu-latest
+    env:
+      LD_SDK_KEY: ${{ secrets.LD_SDK_KEY_DD }}
+      LD_CLIENT_SIDE_ID: ${{ secrets.LD_CLIENT_SIDE_ID_DD }}
 
     steps:
       - name: Deploy & Verify
@@ -19,7 +22,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_DD }}
           port: 22
-          envs: LD_SDK_KEY=${{ secrets.LD_SDK_KEY_DD }},LD_CLIENT_SIDE_ID=${{ secrets.LD_CLIENT_SIDE_ID_DD }}
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -31,8 +34,10 @@ jobs:
             git pull origin datadog
 
             echo "=== Injecting LaunchDarkly keys into .env ==="
-            grep -q "^LD_SDK_KEY=" .env && sed -i "s|^LD_SDK_KEY=.*|LD_SDK_KEY=$LD_SDK_KEY|" .env || echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
-            grep -q "^LD_CLIENT_SIDE_ID=" .env && sed -i "s|^LD_CLIENT_SIDE_ID=.*|LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID|" .env || echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
+            sed -i '/^LD_SDK_KEY=/d' .env
+            sed -i '/^LD_CLIENT_SIDE_ID=/d' .env
+            echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
+            echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
