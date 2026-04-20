@@ -36,9 +36,14 @@ window.LDFlags = (function () {
       }
 
       const context = { kind: 'user', key: getSessionKey() };
+      console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
       ldClient = LDClient.initialize(ldClientSideId, context);
-      await ldClient.waitForInitialization();
-      console.log('[LD] Client SDK initialized');
+
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('LD init timed out after 5s')), 5000)
+      );
+      await Promise.race([ldClient.waitForInitialization(), timeout]);
+      console.log('[LD] Client SDK initialized — flags ready');
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
     }
