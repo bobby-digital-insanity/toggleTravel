@@ -31,8 +31,8 @@ jobs:
             git pull origin grafana
 
             echo "=== Injecting LaunchDarkly keys into .env ==="
-            sed -i "s|^LD_SDK_KEY=.*|LD_SDK_KEY=$LD_SDK_KEY|" .env || echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
-            sed -i "s|^LD_CLIENT_SIDE_ID=.*|LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID|" .env || echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
+            grep -q "^LD_SDK_KEY=" .env && sed -i "s|^LD_SDK_KEY=.*|LD_SDK_KEY=$LD_SDK_KEY|" .env || echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
+            grep -q "^LD_CLIENT_SIDE_ID=" .env && sed -i "s|^LD_CLIENT_SIDE_ID=.*|LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID|" .env || echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
