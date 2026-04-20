@@ -12,13 +12,37 @@
 }());
 // ───────────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Inject Load Gen nav link if not already in the HTML
+document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize LaunchDarkly client SDK before applying flags
+  await LDFlags.init();
+
   const navLinks = document.querySelector('.nav-links');
-  if (navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
+
+  // show-vacation-mode-ui: hide the Vacation Mode nav link if flag is off
+  const showVacationMode = LDFlags.get('show-vacation-mode-ui');
+  if (!showVacationMode && navLinks) {
+    const vmLink = navLinks.querySelector('[href="/vacation-mode.html"]');
+    if (vmLink) vmLink.closest('li').remove();
+    const badge = document.getElementById('vacation-badge');
+    if (badge) badge.style.display = 'none';
+  }
+
+  // show-demo-panel: inject Load Gen nav link only if flag is on
+  const showDemoPanel = LDFlags.get('show-demo-panel');
+  if (showDemoPanel && navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
     const li = document.createElement('li');
     li.innerHTML = '<a href="/demo.html">Load Gen</a>';
     navLinks.appendChild(li);
+  }
+
+  // promo-banner-text: show a banner across the top if flag has a value
+  const promoText = LDFlags.get('promo-banner-text');
+  if (promoText) {
+    const banner = document.createElement('div');
+    banner.id = 'promo-banner';
+    banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;';
+    banner.textContent = promoText;
+    document.body.insertBefore(banner, document.body.firstChild);
   }
 
   // Active nav link
@@ -34,6 +58,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vacation mode badge
   updateVacationBadge();
+
+  // Real-time flag updates
+  LDFlags.onChange('show-vacation-mode-ui', (newValue) => {
+    location.reload();
+  });
+  LDFlags.onChange('promo-banner-text', (newValue) => {
+    const existing = document.getElementById('promo-banner');
+    if (newValue) {
+      if (existing) { existing.textContent = newValue; }
+      else {
+        const banner = document.createElement('div');
+        banner.id = 'promo-banner';
+        banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;';
+        banner.textContent = newValue;
+        document.body.insertBefore(banner, document.body.firstChild);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  });
 });
 
 function updateVacationBadge() {

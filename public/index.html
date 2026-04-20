@@ -149,13 +149,18 @@
     </div>
   </footer>
 
+  <script src="https://unpkg.com/launchdarkly-js-client-sdk@3/dist/ldclient.min.js"></script>
+  <script src="/js/flags.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       try {
         const data = await api.get('/api/destinations');
-        const featured = data.destinations.slice(0, 6);
+        const flaggedIds = LDFlags.get('featured-destinations');
+        const featured = (Array.isArray(flaggedIds) && flaggedIds.length > 0)
+          ? data.destinations.filter((d) => flaggedIds.includes(d.id)).slice(0, 6)
+          : data.destinations.slice(0, 6);
         const grid = document.getElementById('destinations-grid');
         grid.innerHTML = featured.map((d) => `
           <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">

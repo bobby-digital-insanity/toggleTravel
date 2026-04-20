@@ -3,11 +3,18 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const logger = require('../logger');
 const destinations = require('../data/destinations.json');
+const { getFlag } = require('../launchdarkly');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-async function toggle({ enabled, preferences = {}, bookingHistory = [] }) {
-  const model = process.env.CLAUDE_MODEL || 'claude-opus-4-5';
+async function toggle({ enabled, preferences = {}, bookingHistory = [], sessionId = 'anonymous' }) {
+  const vacationModeEnabled = await getFlag('vacation-mode-enabled', true, sessionId);
+  if (!vacationModeEnabled) {
+    logger.info('vacation_mode_blocked_by_flag', { session_id: sessionId });
+    return { enabled: false, farewellMessage: 'Vacation Mode is currently unavailable. Please check back soon!' };
+  }
+
+  const model = await getFlag('ai-model', process.env.CLAUDE_MODEL || 'claude-opus-4-5', sessionId);
   const startTime = Date.now();
 
   const destinationList = destinations
