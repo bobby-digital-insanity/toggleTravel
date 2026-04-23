@@ -38,11 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // promo-banner-text: show a banner across the top if flag has a value
   const promoText = LDFlags.get('promo-banner-text');
   if (promoText) {
-    const banner = document.createElement('div');
-    banner.id = 'promo-banner';
-    banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;';
-    banner.textContent = promoText;
-    document.body.insertBefore(banner, document.body.firstChild);
+    document.body.insertBefore(buildPromoBanner(promoText), document.body.firstChild);
   }
 
   // Active nav link
@@ -66,13 +62,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   LDFlags.onChange('promo-banner-text', (newValue) => {
     const existing = document.getElementById('promo-banner');
     if (newValue) {
-      if (existing) { existing.textContent = newValue; }
-      else {
-        const banner = document.createElement('div');
-        banner.id = 'promo-banner';
-        banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;';
-        banner.textContent = newValue;
-        document.body.insertBefore(banner, document.body.firstChild);
+      if (existing) {
+        existing.replaceWith(buildPromoBanner(newValue));
+      } else {
+        document.body.insertBefore(buildPromoBanner(newValue), document.body.firstChild);
       }
     } else if (existing) {
       existing.remove();
@@ -89,3 +82,18 @@ function updateVacationBadge() {
 }
 
 window.updateVacationBadge = updateVacationBadge;
+
+function buildPromoBanner(text) {
+  const banner = document.createElement('div');
+  banner.id = 'promo-banner';
+  banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:16px;';
+  const span = document.createElement('span');
+  span.textContent = text;
+  const btn = document.createElement('a');
+  btn.href = '/search.html';
+  btn.textContent = 'Search Flights →';
+  btn.style.cssText = 'background:#fff;color:#405BFF;padding:.25rem .75rem;border-radius:999px;font-size:.8rem;font-weight:700;text-decoration:none;white-space:nowrap;';
+  banner.appendChild(span);
+  banner.appendChild(btn);
+  return banner;
+}
