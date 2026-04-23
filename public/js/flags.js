@@ -37,7 +37,14 @@ window.LDFlags = (function () {
 
       const context = { kind: 'user', key: getSessionKey() };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
-      ldClient = LDClient.initialize(ldClientSideId, context);
+
+      const plugins = [];
+      if (typeof SessionReplay !== 'undefined' && SessionReplay.SessionReplay) {
+        plugins.push(new SessionReplay.SessionReplay());
+        console.log('[LD] Session Replay plugin enabled');
+      }
+
+      ldClient = LDClient.initialize(ldClientSideId, context, { plugins });
 
       const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('LD init timed out after 5s')), 5000)
