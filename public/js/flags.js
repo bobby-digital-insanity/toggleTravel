@@ -46,10 +46,7 @@ window.LDFlags = (function () {
 
       ldClient = LDClient.initialize(ldClientSideId, context, { plugins });
 
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('LD init timed out after 5s')), 5000)
-      );
-      await Promise.race([ldClient.waitForInitialization(), timeout]);
+      await ldClient.waitForInitialization(5);
       console.log('[LD] Client SDK initialized — flags ready');
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
