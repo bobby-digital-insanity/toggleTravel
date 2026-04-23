@@ -39,8 +39,8 @@ window.LDFlags = (function () {
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
-      if (typeof SessionReplay !== 'undefined' && SessionReplay.SessionReplay) {
-        plugins.push(new SessionReplay.SessionReplay());
+      if (typeof SessionReplay !== 'undefined' && SessionReplay.default) {
+        plugins.push(new SessionReplay.default());
         console.log('[LD] Session Replay plugin enabled');
       }
 
