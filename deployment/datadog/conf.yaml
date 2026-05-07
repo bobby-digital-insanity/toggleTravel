@@ -1,0 +1,18 @@
+logs:
+  - type: file
+    path: /var/log/toggle-travel/out.log
+    service: toggle-travel
+    source: nodejs
+    log_processing_rules:
+      - type: multi_line
+        name: new_log_start_with_date
+        pattern: \{
+
+  - type: file
+    path: /var/log/toggle-travel/error.log
+    service: toggle-travel
+    source: nodejs
+    log_processing_rules:
+      - type: multi_line
+        name: new_log_start_with_date
+        pattern: \{

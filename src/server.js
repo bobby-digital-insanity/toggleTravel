@@ -2,6 +2,9 @@
 
 require('dotenv').config();
 
+// Must be required before all other modules for Datadog APM auto-instrumentation
+require('./tracer');
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

@@ -43,6 +43,11 @@ jobs:
             echo "=== Installing dependencies ==="
             npm install --omit=dev
 
+            echo "=== Installing Datadog agent log config ==="
+            sudo mkdir -p /etc/datadog-agent/conf.d/toggle-travel.d
+            sudo cp deployment/datadog/conf.yaml /etc/datadog-agent/conf.d/toggle-travel.d/conf.yaml
+            sudo systemctl restart datadog-agent || true
+
             echo "=== Reloading Nginx config ==="
             sudo cp deployment/nginx.conf /etc/nginx/conf.d/toggle-travel.conf
             sudo nginx -t && sudo systemctl reload nginx
