@@ -11,7 +11,6 @@ const path = require('path');
 const logger = require('./logger');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
-const ld = require('./launchdarkly');
 
 const healthRouter = require('./routes/health');
 const destinationsRouter = require('./routes/destinations');
@@ -39,11 +38,6 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Health routes (no /api prefix)
 app.use('/', healthRouter);
 
-// Expose client-side LD ID to the frontend
-app.get('/api/config', (req, res) => {
-  res.json({ ldClientSideId: ld.getClientSideId() });
-});
-
 // API routes
 app.use('/api/destinations', destinationsRouter);
 app.use('/api/search', searchRouter);
@@ -62,10 +56,8 @@ app.get('*', (req, res) => {
 // Centralized error handler (must be last)
 app.use(errorHandler);
 
-ld.init().then(() => {
-  app.listen(PORT, () => {
-    logger.info('server_started', { port: PORT, env: process.env.NODE_ENV || 'development' });
-  });
+app.listen(PORT, () => {
+  logger.info('server_started', { port: PORT, env: process.env.NODE_ENV || 'development' });
 });
 
 module.exports = app;
