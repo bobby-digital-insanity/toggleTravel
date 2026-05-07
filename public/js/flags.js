@@ -40,7 +40,13 @@ window.LDFlags = (function () {
 
       const plugins = [];
       if (typeof Observability !== 'undefined' && Observability.default) {
-        plugins.push(new Observability.default());
+        plugins.push(new Observability.default({
+          tracingOrigins: true,
+          networkRecording: {
+            enabled: true,
+            recordHeadersAndBody: true,
+          },
+        }));
         console.log('[LD] Observability plugin enabled');
       }
       if (typeof SessionReplay !== 'undefined' && SessionReplay.default) {
