@@ -1,33 +1,12 @@
 'use strict';
 
-// ── Datadog vendor badge ────────────────────────────────────────────────────
-(function injectVendorBadge() {
-  const navInner = document.querySelector('.nav-inner');
-  if (!navInner) return;
-  const badge = document.createElement('div');
-  badge.className = 'nav-vendor-badge';
-  badge.style.cssText = 'background:rgba(99,44,166,.08);border-color:#632CA6;color:#632CA6;';
-  badge.innerHTML = '<img src="/img/dd_icon_rgb.svg" alt="Datadog" style="height:22px;width:auto;display:block;"> Datadog';
-  navInner.appendChild(badge);
-}());
-// ───────────────────────────────────────────────────────────────────────────
-
-document.addEventListener('DOMContentLoaded', async () => {
-  // Initialize LaunchDarkly client SDK before applying flags
-  await LDFlags.init();
-
+document.addEventListener('DOMContentLoaded', () => {
   // Inject Load Gen nav link if not already in the HTML
   const navLinks = document.querySelector('.nav-links');
   if (navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
     const li = document.createElement('li');
     li.innerHTML = '<a href="/demo.html">Load Gen</a>';
     navLinks.appendChild(li);
-  }
-
-  // promo-banner-text: show a banner across the top if flag has a value
-  const promoText = LDFlags.get('promo-banner-text');
-  if (promoText) {
-    document.body.insertBefore(buildPromoBanner(promoText), document.body.firstChild);
   }
 
   // Active nav link
@@ -43,20 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Vacation mode badge
   updateVacationBadge();
-
-  // Real-time flag updates
-  LDFlags.onChange('promo-banner-text', (newValue) => {
-    const existing = document.getElementById('promo-banner');
-    if (newValue) {
-      if (existing) {
-        existing.replaceWith(buildPromoBanner(newValue));
-      } else {
-        document.body.insertBefore(buildPromoBanner(newValue), document.body.firstChild);
-      }
-    } else if (existing) {
-      existing.remove();
-    }
-  });
 });
 
 function updateVacationBadge() {
@@ -68,18 +33,3 @@ function updateVacationBadge() {
 }
 
 window.updateVacationBadge = updateVacationBadge;
-
-function buildPromoBanner(text) {
-  const banner = document.createElement('div');
-  banner.id = 'promo-banner';
-  banner.style.cssText = 'background:#405BFF;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:16px;';
-  const span = document.createElement('span');
-  span.textContent = text;
-  const btn = document.createElement('a');
-  btn.href = '/search.html';
-  btn.textContent = 'Search Flights →';
-  btn.style.cssText = 'background:#fff;color:#405BFF;padding:.25rem .75rem;border-radius:999px;font-size:.8rem;font-weight:700;text-decoration:none;white-space:nowrap;';
-  banner.appendChild(span);
-  banner.appendChild(btn);
-  return banner;
-}
