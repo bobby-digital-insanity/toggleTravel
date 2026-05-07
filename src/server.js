@@ -26,7 +26,9 @@ const PORT = process.env.PORT || 3000;
 // Security & perf middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
-app.use(cors());
+app.use(cors({
+  allowedHeaders: ["Content-Type", "Authorization", "traceparent", "tracestate", "x-highlight-request"],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
