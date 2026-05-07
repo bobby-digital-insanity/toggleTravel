@@ -2,6 +2,9 @@
 
 require('dotenv').config();
 
+// Must be required before express for LD Observability auto-instrumentation
+const ld = require('./launchdarkly');
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,7 +14,6 @@ const path = require('path');
 const logger = require('./logger');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
-const ld = require('./launchdarkly');
 
 const healthRouter = require('./routes/health');
 const destinationsRouter = require('./routes/destinations');
