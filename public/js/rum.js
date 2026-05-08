@@ -1,8 +1,8 @@
 'use strict';
 
 window.DD_RUM && window.DD_RUM.init({
-  applicationId: '59a43bd1-7fc2-45a0-a2d3-f51d3387f744',
-  clientToken: 'pub6b00cb73836e87a084a0f4648b8fb626',
+  applicationId: 'b47f898a-a574-4749-9060-2d95e75c51d9',
+  clientToken: 'pub7b7c65bef50507f24cf4aa9a9aa384ee',
   site: 'us5.datadoghq.com',
   service: 'toggle-travel',
   env: 'production',
