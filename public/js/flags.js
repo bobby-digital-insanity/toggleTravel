@@ -44,7 +44,18 @@ window.LDFlags = (function () {
         console.log('[LD] Session Replay plugin enabled');
       }
 
-      ldClient = LDClient.initialize(ldClientSideId, context, { plugins });
+      ldClient = LDClient.initialize(ldClientSideId, context, {
+        plugins,
+        inspectors: [
+          {
+            type: 'flag-used',
+            name: 'dd-inspector',
+            method: (key, detail) => {
+              window.DD_RUM && window.DD_RUM.addFeatureFlagEvaluation(key, detail.value);
+            },
+          },
+        ],
+      });
 
       await ldClient.waitForInitialization(5);
       console.log('[LD] Client SDK initialized — flags ready');
