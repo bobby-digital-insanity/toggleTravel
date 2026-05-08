@@ -1,6 +1,7 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const tracer = require('dd-trace');
 const logger = require('../logger');
 const { authorizePayment } = require('./externalMockService');
 const destinationService = require('./destinationService');
@@ -8,7 +9,7 @@ const destinationService = require('./destinationService');
 // In-memory bookings store
 const bookings = new Map();
 
-async function create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId }) {
+async function create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId, promoText }) {
   const bookingId = `bk-${uuidv4().slice(0, 8).toUpperCase()}`;
   const logCtx = { booking_id: bookingId, destination_id: destinationId, session_id: sessionId };
 
@@ -49,6 +50,14 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
 
   bookings.set(bookingId, booking);
 
+  // Tag the active span with feature flag metadata
+  const span = tracer.scope().active();
+  if (span) {
+    span.setTag('feature_flag.key', 'promo-banner-text');
+    span.setTag('feature_flag.value', promoText || 'none');
+    span.setTag('feature_flag.influenced_booking', !!promoText);
+  }
+
   logger.info('booking_created', {
     booking_id: bookingId,
     destination: dest.name,
@@ -57,6 +66,9 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
     total_amount: totalAmount,
     transaction_id: payment.transactionId,
     session_id: sessionId,
+    'feature_flag.key': 'promo-banner-text',
+    'feature_flag.value': promoText || 'none',
+    'feature_flag.influenced_booking': !!promoText,
   });
 
   return booking;

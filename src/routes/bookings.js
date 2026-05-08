@@ -6,7 +6,7 @@ const bookingService = require('../services/bookingService');
 
 router.post('/', async (req, res, next) => {
   try {
-    const { destinationId, travelers, departureDate, returnDate, contactEmail } = req.body;
+    const { destinationId, travelers, departureDate, returnDate, contactEmail, promoText } = req.body;
 
     if (!destinationId || !travelers || !departureDate || !contactEmail) {
       const err = new Error('Missing required fields: destinationId, travelers, departureDate, contactEmail');
@@ -14,7 +14,7 @@ router.post('/', async (req, res, next) => {
       throw err;
     }
 
-    const booking = await bookingService.create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId: req.sessionId });
+    const booking = await bookingService.create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId: req.sessionId, promoText });
     res.status(201).json({ booking });
   } catch (err) {
     next(err);

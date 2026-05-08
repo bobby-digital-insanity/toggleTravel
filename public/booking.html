@@ -367,6 +367,7 @@
           departureDate: document.getElementById('f-departure').value,
           returnDate: document.getElementById('f-return').value,
           contactEmail: document.getElementById('f-email').value,
+          promoText: (typeof LDFlags !== 'undefined' ? LDFlags.get('promo-banner-text') : null) || null,
         });
 
         const booking = data.booking;
