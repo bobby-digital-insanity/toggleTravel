@@ -30,6 +30,7 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
     logger.info('booking_stage', { ...logCtx, stage: 'payment_authorized', duration_ms: Date.now() - payStart, amount: totalAmount });
   } catch (err) {
     logger.warn('booking_stage', { ...logCtx, stage: 'payment_declined', duration_ms: Date.now() - payStart, amount: totalAmount, reason: err.message });
+    tracer.dogstatsd.increment('toggle_travel.bookings.payment_declined', 1, [`destination_id:${destinationId}`]);
     throw err;
   }
 
@@ -49,6 +50,13 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
   };
 
   bookings.set(bookingId, booking);
+
+  // Custom metrics
+  const destTags = [`destination_id:${dest.id}`, `destination_name:${dest.name}`, `region:${dest.region}`];
+  tracer.dogstatsd.increment('toggle_travel.bookings.created', 1, destTags);
+  tracer.dogstatsd.distribution('toggle_travel.bookings.revenue', totalAmount, destTags);
+  tracer.dogstatsd.distribution('toggle_travel.bookings.travelers', Number(travelers), [`destination_id:${dest.id}`]);
+  tracer.dogstatsd.gauge('toggle_travel.active_bookings', bookings.size, []);
 
   // Tag the active span with feature flag metadata
   const span = tracer.scope().active();
