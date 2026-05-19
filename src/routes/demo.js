@@ -5,9 +5,11 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 
-const SEED_SCRIPT = path.join(__dirname, '../../scripts/seed-load.js');
+const SEED_SCRIPT = path.join(__dirname, '../../scripts/playwright-load.js');
 
-let activeJob = null; // { child, startedAt, rounds }
+const VALID_BROWSERS = new Set(['chrome', 'firefox', 'safari', 'iphone', 'pixel']);
+
+let activeJob = null; // { child, startedAt, rounds, browsers }
 
 // POST /api/demo/seed — start load generation, stream output as ndjson
 router.post('/seed', (req, res) => {
@@ -17,6 +19,9 @@ router.post('/seed', (req, res) => {
 
   const rounds = Math.min(Math.max(parseInt(req.body.rounds || '3', 10), 1), 10);
   const pause  = Math.min(Math.max(parseInt(req.body.pause  || '3', 10), 1), 30);
+  const rawBrowsers = Array.isArray(req.body.browsers) ? req.body.browsers : (req.body.browsers || 'chrome').split(',');
+  const browsers = [...new Set(rawBrowsers.map((b) => b.trim().toLowerCase()).filter((b) => VALID_BROWSERS.has(b)))];
+  const browsersArg = browsers.length ? browsers.join(',') : 'chrome';
 
   res.setHeader('Content-Type', 'application/x-ndjson');
   res.setHeader('Cache-Control', 'no-cache');
@@ -35,9 +40,10 @@ router.post('/seed', (req, res) => {
     '--host', 'http://localhost:3000',
     '--rounds', String(rounds),
     '--pause', String(pause),
+    '--browsers', browsersArg,
   ]);
 
-  activeJob = { child, startedAt: new Date().toISOString(), rounds };
+  activeJob = { child, startedAt: new Date().toISOString(), rounds, browsers: browsersArg };
 
   child.on('error', (err) => {
     send('log', { line: `✗ Failed to start process: ${err.message}`, error: true });
