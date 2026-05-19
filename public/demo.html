@@ -254,6 +254,15 @@
             <div class="rounds-pill" data-rounds="10">10</div>
           </div>
 
+          <div class="control-label" style="margin-top:16px">Browsers</div>
+          <div class="rounds-pills" id="browser-pills">
+            <div class="rounds-pill selected" data-browser="chrome">Chrome</div>
+            <div class="rounds-pill" data-browser="firefox">Firefox</div>
+            <div class="rounds-pill" data-browser="safari">Safari</div>
+            <div class="rounds-pill" data-browser="iphone">iPhone</div>
+            <div class="rounds-pill" data-browser="pixel">Pixel</div>
+          </div>
+
           <button class="btn-run" id="run-btn" onclick="startLoad()">
             ▶ Generate Traffic
           </button>
@@ -271,8 +280,7 @@
             <div class="legend-item"><span>🛍</span> Window Shopper × 2</div>
             <div class="legend-item"><span>🚪</span> Abandoned Checkout × 1</div>
             <div class="legend-item"><span>✅</span> Complete Booking × 1</div>
-            <div class="legend-item"><span>✈</span> Vacation Mode × 1</div>
-            <div class="legend-item"><span>⚠️</span> Error Spike × 1</div>
+            <div class="legend-item"><span>⚠️</span> Error Signals × 1</div>
           </div>
         </div>
 
@@ -307,13 +315,31 @@
   <script src="/js/nav.js"></script>
   <script>
     let selectedRounds = 3;
+    let selectedBrowsers = new Set(['chrome']);
 
-    // Rounds pill selection
-    document.querySelectorAll('.rounds-pill').forEach((pill) => {
+    // Rounds pill selection (single-select)
+    document.querySelectorAll('.rounds-pill[data-rounds]').forEach((pill) => {
       pill.addEventListener('click', () => {
-        document.querySelectorAll('.rounds-pill').forEach((p) => p.classList.remove('selected'));
+        document.querySelectorAll('.rounds-pill[data-rounds]').forEach((p) => p.classList.remove('selected'));
         pill.classList.add('selected');
         selectedRounds = parseInt(pill.dataset.rounds);
+      });
+    });
+
+    // Browser pill selection (multi-select)
+    document.querySelectorAll('.rounds-pill[data-browser]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        const b = pill.dataset.browser;
+        if (selectedBrowsers.has(b)) {
+          // Keep at least one selected
+          if (selectedBrowsers.size > 1) {
+            selectedBrowsers.delete(b);
+            pill.classList.remove('selected');
+          }
+        } else {
+          selectedBrowsers.add(b);
+          pill.classList.add('selected');
+        }
       });
     });
 
@@ -372,7 +398,7 @@
         const response = await fetch('/api/demo/seed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rounds: selectedRounds, pause: 3 }),
+          body: JSON.stringify({ rounds: selectedRounds, pause: 3, browsers: [...selectedBrowsers] }),
         });
 
         if (response.status === 409) {
