@@ -66,9 +66,13 @@ router.post('/seed', (req, res) => {
     res.end();
   });
 
-  // If client disconnects mid-run, kill the child
-  req.on('close', () => {
-    if (activeJob) {
+  // If client disconnects mid-run, kill the child.
+  // Use res.on('close') rather than req.on('close') — in Node 18+, req emits
+  // 'close' as soon as the request body is consumed (i.e. immediately after
+  // express.json() parses the body), which would kill the child right after spawn.
+  // res.on('close') only fires when the connection is actually torn down.
+  res.on('close', () => {
+    if (activeJob && !res.writableEnded) {
       activeJob.child.kill();
       activeJob = null;
     }

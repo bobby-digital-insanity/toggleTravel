@@ -230,11 +230,10 @@ async function vacationModeSession(persona, round) {
     preferences: { budget: persona.budget, styles: persona.styles },
   }, sid);
 
-  if (on.status === 200 && on.data.persona) {
-    ok(`POST /api/vacation-mode ON → "${on.data.persona}" (${elapsed(t)})`);
-    if (on.data.recommendations?.length) {
-      const recs = on.data.recommendations.map((r) => r.name || r.id).join(', ');
-      console.log(`    → AI recommended: ${recs}`);
+  if (on.status === 200 && on.data.travelPersona) {
+    ok(`POST /api/vacation-mode ON → "${on.data.travelPersona}" (${elapsed(t)})`);
+    if (on.data.recommendedDestinationIds?.length) {
+      console.log(`    → AI recommended: ${on.data.recommendedDestinationIds.join(', ')}`);
     }
   } else if (on.status === 500 || on.status === 503) {
     warn(`POST /api/vacation-mode → AI unavailable (${elapsed(t)}), skipping`);
@@ -247,7 +246,7 @@ async function vacationModeSession(persona, round) {
   await sleep(jitter(2000, 3500));
 
   // Click through to one of the recommended destinations
-  const recId = on.data.recommendations?.[0]?.id;
+  const recId = on.data.recommendedDestinationIds?.[0];
   if (recId) {
     t = Date.now();
     const d = await req('GET', `/api/destinations/${recId}`, null, sid);
