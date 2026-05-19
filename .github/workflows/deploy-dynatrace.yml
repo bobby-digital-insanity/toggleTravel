@@ -43,6 +43,9 @@ jobs:
             echo "=== Installing dependencies ==="
             npm install --omit=dev
 
+            echo "=== Installing Playwright browsers ==="
+            npx playwright install chromium firefox webkit
+
             echo "=== Reloading Nginx config ==="
             sudo cp deployment/nginx.conf /etc/nginx/conf.d/toggle-travel.conf
             sudo nginx -t && sudo systemctl reload nginx
