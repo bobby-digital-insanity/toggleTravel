@@ -35,7 +35,8 @@ window.LDFlags = (function () {
         return;
       }
 
-      const context = { kind: 'user', key: getSessionKey() };
+      const runId = localStorage.getItem('tt-run-id');
+      const context = { kind: 'user', key: getSessionKey(), ...(runId ? { loadRunId: runId } : {}) };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
@@ -80,7 +81,9 @@ window.LDFlags = (function () {
   async function identify(email) {
     if (!ldClient || !email) return;
     try {
-      await ldClient.identify({ kind: 'user', key: email, name: email });
+      const runId = localStorage.getItem('tt-run-id');
+      const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}) };
+      await ldClient.identify(ctx);
       console.log('[LD] Identified user:', email);
     } catch (err) {
       console.warn('[LD] identify failed:', err.message);

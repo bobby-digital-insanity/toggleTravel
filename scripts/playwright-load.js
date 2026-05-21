@@ -37,6 +37,7 @@ const BASE      = arg('--host')    || 'http://localhost:3000';
 const ROUNDS    = parseInt(arg('--rounds') || '3', 10);
 const PAUSE_SEC = parseInt(arg('--pause')  || '3', 10);
 const BROWSERS  = (arg('--browsers') || 'chrome').split(',').map((b) => b.trim().toLowerCase());
+const RUN_ID    = Date.now().toString(36).slice(-6);
 
 // ── Logging (NDJSON-friendly stdout) ─────────────────────────────────────────
 
@@ -127,6 +128,7 @@ async function withBrowser(browserKey, persona, fn) {
   };
 
   const context = await browser.newContext(contextOpts);
+  await context.addInitScript((runId) => localStorage.setItem('tt-run-id', runId), RUN_ID);
   const page    = await context.newPage();
 
   // Surface console errors to stderr for visibility
@@ -494,6 +496,7 @@ async function main() {
   process.stdout.write('Toggle Travel — Playwright Load\n');
   process.stdout.write(`Host:     ${BASE}\n`);
   process.stdout.write(`Rounds:   ${ROUNDS}  |  Pause: ${PAUSE_SEC}s  |  Browsers: ${BROWSERS.join(', ')}\n`);
+  process.stdout.write(`Run ID:   ${RUN_ID}\n`);
 
   // Validate browser list
   const invalid = BROWSERS.filter((b) => !BROWSER_CONFIGS[b]);
