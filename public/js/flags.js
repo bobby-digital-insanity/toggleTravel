@@ -76,5 +76,16 @@ window.LDFlags = (function () {
     ldClient.on('change:' + key, callback);
   }
 
-  return { init, get, onChange };
+  // Identify a known user — call when their email becomes known (e.g. booking form)
+  async function identify(email) {
+    if (!ldClient || !email) return;
+    try {
+      await ldClient.identify({ kind: 'user', key: email, name: email });
+      console.log('[LD] Identified user:', email);
+    } catch (err) {
+      console.warn('[LD] identify failed:', err.message);
+    }
+  }
+
+  return { init, get, onChange, identify };
 }());
