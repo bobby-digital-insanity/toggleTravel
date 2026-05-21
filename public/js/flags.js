@@ -59,6 +59,13 @@ window.LDFlags = (function () {
 
       await ldClient.waitForInitialization(5);
       console.log('[LD] Client SDK initialized — flags ready');
+
+      // Auto-identify load gen persona sessions
+      const personaEmail = localStorage.getItem('tt-persona-email');
+      if (personaEmail) {
+        const ctx = { kind: 'user', key: personaEmail, name: personaEmail, ...(runId ? { loadRunId: runId } : {}) };
+        ldClient.identify(ctx).catch(() => {});
+      }
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
     }

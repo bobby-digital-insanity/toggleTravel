@@ -128,7 +128,10 @@ async function withBrowser(browserKey, persona, fn) {
   };
 
   const context = await browser.newContext(contextOpts);
-  await context.addInitScript((runId) => localStorage.setItem('tt-run-id', runId), RUN_ID);
+  await context.addInitScript(({ runId, personaEmail }) => {
+    localStorage.setItem('tt-run-id', runId);
+    localStorage.setItem('tt-persona-email', personaEmail);
+  }, { runId: RUN_ID, personaEmail: persona.email });
   const page    = await context.newPage();
 
   // Surface console errors to stderr for visibility
