@@ -36,7 +36,7 @@ window.LDFlags = (function () {
       }
 
       const runId = localStorage.getItem('tt-run-id');
-      const context = { kind: 'user', key: getSessionKey(), ...(runId ? { loadRunId: runId } : {}) };
+      const context = { kind: 'user', key: getSessionKey(), ...(runId ? { name: runId, loadRunId: runId } : {}) };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
