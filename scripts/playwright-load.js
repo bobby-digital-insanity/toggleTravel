@@ -115,7 +115,10 @@ async function withBrowser(browserKey, persona, fn) {
     return;
   }
 
-  const browser = await config.engine.launch({ headless: true });
+  const browser = await config.engine.launch({
+    headless: true,
+    args: ['--no-zygote'],
+  });
 
   const contextOpts = {
     locale:       persona.locale,
