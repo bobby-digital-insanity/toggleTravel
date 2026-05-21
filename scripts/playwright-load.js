@@ -117,7 +117,9 @@ async function withBrowser(browserKey, persona, fn) {
 
   const browser = await config.engine.launch({
     headless: true,
-    args: ['--no-zygote'],
+    // Required on Amazon Linux EC2: no-zygote + disable-gpu + single-process prevent
+    // Chromium from crashing due to sandbox/renderer process issues on non-standard Linux.
+    args: ['--no-zygote', '--disable-gpu', '--single-process'],
   });
 
   const contextOpts = {
