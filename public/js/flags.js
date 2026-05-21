@@ -35,8 +35,15 @@ window.LDFlags = (function () {
         return;
       }
 
-      const runId = localStorage.getItem('tt-run-id');
-      const context = { kind: 'user', key: getSessionKey(), ...(runId ? { name: runId, loadRunId: runId } : {}) };
+      const runId       = localStorage.getItem('tt-run-id');
+      const personaEmail = localStorage.getItem('tt-persona-email');
+      const key          = personaEmail || getSessionKey();
+      const context      = {
+        kind: 'user',
+        key,
+        name: personaEmail || runId || undefined,
+        ...(runId ? { loadRunId: runId } : {}),
+      };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
@@ -59,13 +66,6 @@ window.LDFlags = (function () {
 
       await ldClient.waitForInitialization(5);
       console.log('[LD] Client SDK initialized — flags ready');
-
-      // Auto-identify load gen persona sessions
-      const personaEmail = localStorage.getItem('tt-persona-email');
-      if (personaEmail) {
-        const ctx = { kind: 'user', key: personaEmail, name: personaEmail, ...(runId ? { loadRunId: runId } : {}) };
-        ldClient.identify(ctx).catch(() => {});
-      }
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
     }
