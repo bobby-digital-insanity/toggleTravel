@@ -143,6 +143,7 @@ async function withBrowser(browserKey, persona, fn) {
 
   try {
     await fn(page, config.label);
+    await sleep(3000); // allow LD Session Replay SDK to flush before closing
   } finally {
     await context.close();
     await browser.close();
