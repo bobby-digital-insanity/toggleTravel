@@ -32,7 +32,10 @@ jobs:
             echo "=== Installing dependencies ==="
             npm install --omit=dev
 
-            echo "=== Installing Playwright browsers ==="
+            echo "=== Installing Playwright system dependencies ==="
+            npx playwright install-deps chromium
+
+            echo "=== Installing Playwright browser binaries ==="
             npx playwright install chromium firefox webkit
 
             echo "=== Reloading Nginx config ==="
