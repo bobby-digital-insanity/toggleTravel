@@ -6,6 +6,8 @@
 
 window.LDFlags = (function () {
   let ldClient = null;
+  let readyResolve;
+  const ready = new Promise((r) => { readyResolve = r; });
 
   const DEFAULTS = {
     'show-vacation-mode-ui': true,
@@ -68,6 +70,8 @@ window.LDFlags = (function () {
       console.log('[LD] Client SDK initialized — flags ready');
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
+    } finally {
+      readyResolve();
     }
   }
 
@@ -86,7 +90,9 @@ window.LDFlags = (function () {
 
   // Identify a known user — call when their email becomes known (e.g. booking form)
   async function identify(email) {
-    if (!ldClient || !email) return;
+    if (!email) return;
+    await ready;
+    if (!ldClient) return;
     try {
       const runId = localStorage.getItem('tt-run-id');
       const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}) };
@@ -97,5 +103,5 @@ window.LDFlags = (function () {
     }
   }
 
-  return { init, get, onChange, identify };
+  return { init, get, onChange, identify, ready };
 }());

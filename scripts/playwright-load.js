@@ -179,12 +179,15 @@ async function maybeClickBanner(page) {
 async function identifyInBrowser(page, email) {
   try {
     await page.waitForFunction(
-      () => window.LDFlags && typeof window.LDFlags.identify === 'function',
+      () => window.LDFlags && window.LDFlags.ready,
       { timeout: 5000 }
     );
-    await page.evaluate((e) => window.LDFlags.identify(e), email);
+    await page.evaluate(async (e) => {
+      await window.LDFlags.ready;
+      await window.LDFlags.identify(e);
+    }, email);
   } catch {
-    // LDFlags.identify not available on this branch — skip
+    // LDFlags not available on this branch — skip
   }
 }
 
