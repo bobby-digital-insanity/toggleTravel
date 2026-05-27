@@ -52,6 +52,27 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function jitter(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+/** Stop LD Session Replay and wait for upload before closing the browser. */
+async function flushLdSessionReplay(page) {
+  try {
+    const flushed = await page.evaluate(async () => {
+      if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
+        return window.LDFlags.flushSessionReplay();
+      }
+      if (typeof LDRecord !== 'undefined' && typeof LDRecord.stop === 'function') {
+        await LDRecord.stop();
+        return true;
+      }
+      return false;
+    });
+    if (flushed) ok('Session replay flushed');
+    else warn('Session replay not active — skipped flush');
+  } catch (err) {
+    warn(`Session replay flush failed: ${err.message}`);
+  }
+  await sleep(5000);
+}
+
 // ── Personas ──────────────────────────────────────────────────────────────────
 
 const PERSONAS = [
@@ -143,7 +164,7 @@ async function withBrowser(browserKey, persona, fn) {
 
   try {
     await fn(page, config.label);
-    await sleep(3000); // allow LD Session Replay SDK to flush before closing
+    await flushLdSessionReplay(page);
   } finally {
     await context.close();
     await browser.close();
@@ -171,10 +192,9 @@ async function maybeClickBanner(page) {
 
 // ── Flows ─────────────────────────────────────────────────────────────────────
 
-// Persona is identified to LD via the `tt-persona-email` localStorage value
-// seeded by addInitScript before any page load — flags.js reads it and passes
-// it as the initial LD context key. Calling LDFlags.identify() afterwards with
-// the same key tears down the in-flight Session Replay recording, so we don't.
+// Persona is identified to LD via `tt-persona-email` (set in addInitScript).
+// flags.js uses it as the initial context key; booking.html skips identify()
+// when `tt-run-id` is set. Each session ends with LDRecord.stop() via flushLdSessionReplay().
 
 /**
  * Window shopper: browses destinations, does a casual search, never books.

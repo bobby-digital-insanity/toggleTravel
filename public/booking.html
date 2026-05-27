@@ -317,7 +317,8 @@
         const email = document.getElementById('f-email').value;
         if (!email || !email.includes('@')) { document.getElementById('err-email').textContent = 'Please enter a valid email'; return; }
         document.getElementById('err-email').textContent = '';
-        if (window.LDFlags) LDFlags.identify(email);
+        // Skip during Playwright load gen — persona is already the LD context key (see flags.js)
+        if (window.LDFlags && !localStorage.getItem('tt-run-id')) LDFlags.identify(email);
         buildReview();
       }
 

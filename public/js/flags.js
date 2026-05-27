@@ -17,6 +17,11 @@ window.LDFlags = (function () {
     'promo-banner-text':      '',
   };
 
+  // Set by Playwright load script (scripts/playwright-load.js) per browser session
+  function isLoadGen() {
+    return !!localStorage.getItem('tt-run-id');
+  }
+
   // Resolve or create a stable anonymous session key
   function getSessionKey() {
     let key = localStorage.getItem('tt-session-id');
@@ -88,9 +93,25 @@ window.LDFlags = (function () {
     ldClient.on('change:' + key, callback);
   }
 
+  // Stop recording and upload the current session (call before closing the browser in load gen)
+  async function flushSessionReplay() {
+    await ready;
+    if (typeof LDRecord === 'undefined' || typeof LDRecord.stop !== 'function') return false;
+    try {
+      await LDRecord.stop();
+      console.log('[LD] Session replay stopped and flushed');
+      return true;
+    } catch (err) {
+      console.warn('[LD] Session replay flush failed:', err.message);
+      return false;
+    }
+  }
+
   // Identify a known user — call when their email becomes known (e.g. booking form)
   async function identify(email) {
     if (!email) return;
+    // Load-gen personas are already the LD context key via tt-persona-email; re-identify tears down replay
+    if (isLoadGen()) return;
     await ready;
     if (!ldClient) return;
     try {
@@ -103,5 +124,5 @@ window.LDFlags = (function () {
     }
   }
 
-  return { init, get, onChange, identify, ready };
+  return { init, get, onChange, identify, flushSessionReplay, isLoadGen, ready };
 }());
