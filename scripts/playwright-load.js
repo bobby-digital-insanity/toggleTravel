@@ -56,34 +56,25 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 async function flushLdSessionReplay(page, persona) {
   try {
     await page.waitForFunction(
-      () => window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function',
-      { timeout: 15000 },
-    ).catch(() => {});
-    await page.waitForFunction(
-      () => window.LDRecord && typeof window.LDRecord.getRecordingState === 'function',
-      { timeout: 15000 },
-    ).catch(() => {});
-    await page.waitForFunction(
-      () => window.LDRecord.getRecordingState() === 'Recording',
-      { timeout: 12000 },
+      () => window.LDFlags?.flushSessionReplay && window.LDRecord?.getRecordingState,
+      { timeout: 10000 },
     ).catch(() => {});
 
     const result = await page.evaluate(async ({ name, email }) => {
-      const ld = window.LDRecord;
-      const state = ld?.getRecordingState?.() ?? 'not-ready';
-
-      if (ld?.addSessionProperties) {
+      const state = window.LDRecord?.getRecordingState?.() ?? 'not-ready';
+      if (window.LDRecord?.addSessionProperties) {
         try {
-          ld.addSessionProperties({ persona: name, personaEmail: email });
+          window.LDRecord.addSessionProperties({ persona: name, personaEmail: email });
         } catch { /* ignore */ }
       }
-
-      if (window.LDFlags?.flushSessionReplay) {
-        const flushed = await window.LDFlags.flushSessionReplay();
-        return { flushed, state };
-      }
-      return { flushed: false, state };
+      const flushed = window.LDFlags?.flushSessionReplay
+        ? await window.LDFlags.flushSessionReplay()
+        : false;
+      return { flushed, state };
     }, { name: persona.name, email: persona.email });
+
+    // Upload window runs on the Node side (evaluate must not block 6s+ — hangs the stream).
+    await sleep(8000);
 
     if (!result.flushed) {
       warn(`Replay may not upload (${persona.name}, state=${result.state})`);
@@ -93,8 +84,6 @@ async function flushLdSessionReplay(page, persona) {
   } catch (err) {
     warn(`Session replay flush failed (${persona.name}): ${err.message}`);
   }
-
-  await sleep(2000);
 }
 
 // ── Personas ──────────────────────────────────────────────────────────────────
@@ -191,8 +180,9 @@ async function withBrowser(browserKey, persona, fn) {
     await fn(page, config.label);
     await flushLdSessionReplay(page, persona);
   } finally {
+    // Do not use runBeforeUnload — LD registers beforeunload handlers that can hang headless close.
     try {
-      await page.close({ runBeforeUnload: true });
+      await page.close();
     } catch { /* already closed */ }
     await context.close();
     await browser.close();
@@ -223,9 +213,9 @@ async function maybeClickBanner(page) {
     if (await banner.isVisible({ timeout: 1500 })) {
       await banner.click();
       ok('Clicked promo banner (LD experiment metric)');
-      await page.goBack();
+      await page.goto('/search.html');
       await page.waitForLoadState('domcontentloaded');
-      await waitForSearchResults(page).catch(() => {});
+      await waitForSearchResults(page);
       await sleep(jitter(300, 600));
     }
   } catch {
@@ -272,7 +262,7 @@ async function windowShopper(page, browserLabel, persona) {
 
   // Casual search
   t = Date.now();
-  const searchInput = page.locator('#search-input, input[type="search"], input[placeholder*="search" i]').first();
+  const searchInput = page.locator('#search-q, #search-input, input[type="search"]').first();
   if (await searchInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await searchInput.fill(pick(['beach', 'temple', 'adventure', 'food']));
     await searchInput.press('Enter');

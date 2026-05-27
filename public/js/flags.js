@@ -118,11 +118,8 @@ window.LDFlags = (function () {
       if (ldClient && typeof ldClient.flush === 'function') {
         await ldClient.flush();
       }
-
-      // Let the SDK's periodic PushPayload complete (headless skips real page unload).
-      await new Promise((r) => setTimeout(r, 6000));
-      console.log('[LD] Session replay flush complete (state:', state, ')');
-      return state === 'Recording';
+      console.log('[LD] Session replay flush started (state:', state, ')');
+      return true;
     } catch (err) {
       console.warn('[LD] Session replay flush failed:', err.message);
       return false;
