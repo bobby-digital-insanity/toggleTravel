@@ -6,6 +6,7 @@
 
 window.LDFlags = (function () {
   let ldClient = null;
+  let initPromise = null;
   let readyResolve;
   const ready = new Promise((r) => { readyResolve = r; });
 
@@ -33,6 +34,10 @@ window.LDFlags = (function () {
   }
 
   async function init() {
+    if (ldClient) return;
+    if (initPromise) return initPromise;
+
+    initPromise = (async () => {
     try {
       const res = await fetch('/api/config');
       const { ldClientSideId } = await res.json();
@@ -84,6 +89,9 @@ window.LDFlags = (function () {
     } finally {
       readyResolve();
     }
+    })();
+
+    return initPromise;
   }
 
   // Read a flag value, falling back to the defined default
@@ -100,27 +108,21 @@ window.LDFlags = (function () {
   }
 
   // Push the final replay payload (call before closing the browser in load gen).
-  // Do NOT call LDRecord.stop() — it sets NotRecording and removes unload listeners
-  // without running _save(), so headless Playwright sessions never reach LD.
+  // Do NOT call LDRecord.stop() or dispatch beforeunload — both cancel in-flight uploads.
   async function flushSessionReplay() {
     await ready;
 
-    const state = typeof LDRecord !== 'undefined' && LDRecord.getRecordingState
-      ? LDRecord.getRecordingState()
-      : 'unknown';
+    const state = window.LDRecord?.getRecordingState?.() ?? 'unknown';
 
     try {
-      document.dispatchEvent(new Event('visibilitychange'));
-      window.dispatchEvent(new Event('pagehide'));
-      window.dispatchEvent(new Event('beforeunload'));
-
       if (ldClient && typeof ldClient.flush === 'function') {
         await ldClient.flush();
       }
 
-      await new Promise((r) => setTimeout(r, 4000));
-      console.log('[LD] Session replay flush dispatched (state:', state, ')');
-      return true;
+      // Let the SDK's periodic PushPayload complete (headless skips real page unload).
+      await new Promise((r) => setTimeout(r, 6000));
+      console.log('[LD] Session replay flush complete (state:', state, ')');
+      return state === 'Recording';
     } catch (err) {
       console.warn('[LD] Session replay flush failed:', err.message);
       return false;

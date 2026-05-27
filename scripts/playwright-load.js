@@ -63,32 +63,32 @@ async function flushLdSessionReplay(page, persona) {
       () => window.LDRecord && typeof window.LDRecord.getRecordingState === 'function',
       { timeout: 15000 },
     ).catch(() => {});
+    await page.waitForFunction(
+      () => window.LDRecord.getRecordingState() === 'Recording',
+      { timeout: 12000 },
+    ).catch(() => {});
 
     const result = await page.evaluate(async ({ name, email }) => {
       const ld = window.LDRecord;
-      const state = ld && typeof ld.getRecordingState === 'function'
-        ? ld.getRecordingState()
-        : 'not-ready';
+      const state = ld?.getRecordingState?.() ?? 'not-ready';
 
-      if (ld && typeof ld.addSessionProperties === 'function') {
+      if (ld?.addSessionProperties) {
         try {
           ld.addSessionProperties({ persona: name, personaEmail: email });
         } catch { /* ignore */ }
       }
 
-      if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
+      if (window.LDFlags?.flushSessionReplay) {
         const flushed = await window.LDFlags.flushSessionReplay();
-        return { flushed, state, hasRecord: !!ld };
+        return { flushed, state };
       }
-      return { flushed: false, state, hasRecord: !!ld };
+      return { flushed: false, state };
     }, { name: persona.name, email: persona.email });
 
-    if (!result.hasRecord) {
-      warn(`LDRecord not on window yet (${persona.name}) — replay may not upload`);
-    } else if (result.flushed) {
-      ok(`Session replay flushed (${persona.name}, ${result.state})`);
+    if (!result.flushed) {
+      warn(`Replay may not upload (${persona.name}, state=${result.state})`);
     } else {
-      warn(`Session replay flush skipped (${persona.name}, state=${result.state})`);
+      ok(`Session replay flushed (${persona.name}, ${result.state})`);
     }
   } catch (err) {
     warn(`Session replay flush failed (${persona.name}): ${err.message}`);
@@ -201,6 +201,19 @@ async function withBrowser(browserKey, persona, fn) {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
+/** Wait for /api/search to render destination cards (not skeleton placeholders). */
+async function waitForSearchResults(page, timeout = 20000) {
+  await page.waitForFunction(
+    () => {
+      const title = document.querySelector(
+        '#results-grid a.card[href*="destination.html"] .card-title',
+      );
+      return title && title.textContent.trim().length > 0;
+    },
+    { timeout },
+  );
+}
+
 /**
  * Clicks the promo banner link if present — supports LD click-through experiments.
  */
@@ -211,6 +224,8 @@ async function maybeClickBanner(page) {
       await banner.click();
       ok('Clicked promo banner (LD experiment metric)');
       await page.goBack();
+      await page.waitForLoadState('domcontentloaded');
+      await waitForSearchResults(page).catch(() => {});
       await sleep(jitter(300, 600));
     }
   } catch {
@@ -232,13 +247,14 @@ async function windowShopper(page, browserLabel, persona) {
 
   let t = Date.now();
   await page.goto('/search.html');
+  await waitForSearchResults(page);
   ok(`Loaded /search.html (${Date.now() - t}ms)`);
 
   await maybeClickBanner(page);
   await sleep(jitter(800, 1400));
 
   // Click 3–4 destination cards
-  const cards = page.locator('.card');
+  const cards = page.locator('#results-grid a.card');
   const count = await cards.count();
   const toView = Math.min(jitter(3, 4), count);
 
@@ -275,20 +291,22 @@ async function abandonedCheckout(page, browserLabel, persona) {
 
   let t = Date.now();
   await page.goto('/search.html');
+  await waitForSearchResults(page);
   ok(`Loaded /search.html (${Date.now() - t}ms)`);
 
   await maybeClickBanner(page);
   await sleep(jitter(600, 1000));
 
-  const destCount = Math.min(2, await page.locator('.card').count());
+  const destCount = Math.min(2, await page.locator('#results-grid a.card').count());
 
   for (let i = 0; i < destCount; i++) {
     // Fresh search each iteration — goBack() after booking is unreliable in headless
     await page.goto('/search.html');
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await waitForSearchResults(page).catch(() => {});
 
     t = Date.now();
-    const card = page.locator('.card').nth(i);
+    const card = page.locator('#results-grid a.card').nth(i);
     const name = await card.locator('h3, .card-title').textContent().catch(() => `card-${i}`);
     await card.click();
     await page.waitForURL('**/destination.html**', { timeout: 10000 }).catch(() => {});
@@ -327,13 +345,14 @@ async function completeBooking(page, browserLabel, persona) {
 
   let t = Date.now();
   await page.goto('/search.html');
+  await waitForSearchResults(page);
   ok(`Loaded /search.html (${Date.now() - t}ms)`);
 
   await maybeClickBanner(page);
-  await sleep(jitter(500, 900));
+  await waitForSearchResults(page).catch(() => {});
 
   // Click first destination
-  const card = page.locator('.card').first();
+  const card = page.locator('#results-grid a.card').first();
   if (!(await card.isVisible({ timeout: 5000 }).catch(() => false))) {
     warn('No destination cards found, skipping booking flow');
     return;
