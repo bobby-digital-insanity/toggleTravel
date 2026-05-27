@@ -103,6 +103,14 @@ window.LDFlags = (function () {
   async function flushSessionReplay() {
     await ready;
     if (typeof LDRecord === 'undefined' || typeof LDRecord.stop !== 'function') return false;
+
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      const state = LDRecord.getRecordingState?.();
+      if (state === 'Recording') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
     try {
       await LDRecord.stop();
       console.log('[LD] Session replay stopped and flushed');

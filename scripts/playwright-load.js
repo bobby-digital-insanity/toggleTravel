@@ -55,31 +55,46 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 /** Stop LD Session Replay and wait for upload before closing the browser. */
 async function flushLdSessionReplay(page, persona) {
   try {
-    // Always tear down from search.html so LD SDK is loaded and recording is active
-    await page.goto('/search.html');
-    await page.waitForLoadState('domcontentloaded');
+    // Flush on the current page — navigating away first abandons the in-flight recording.
+    const onAppPage = /\/(search|destination|booking|vacation-mode|bookings|index)\.html/.test(page.url())
+      || page.url().endsWith('/');
+
+    if (!onAppPage) {
+      await page.goto('/search.html');
+      await page.waitForLoadState('domcontentloaded');
+      await sleep(3000);
+    }
+
     await page.waitForFunction(
       () => window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function',
       { timeout: 15000 },
     ).catch(() => {});
-    await sleep(2000);
+    await sleep(1000);
 
-    const flushed = await page.evaluate(async ({ name, email }) => {
+    const result = await page.evaluate(async ({ name, email }) => {
+      const state = typeof LDRecord !== 'undefined' && LDRecord.getRecordingState
+        ? LDRecord.getRecordingState()
+        : 'unknown';
+
       if (typeof LDRecord !== 'undefined' && typeof LDRecord.addSessionProperties === 'function') {
-        LDRecord.addSessionProperties({ persona: name, personaEmail: email });
+        try {
+          LDRecord.addSessionProperties({ persona: name, personaEmail: email });
+        } catch { /* session may not be ready */ }
       }
+
       if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
-        return window.LDFlags.flushSessionReplay();
+        const flushed = await window.LDFlags.flushSessionReplay();
+        return { flushed, state };
       }
       if (typeof LDRecord !== 'undefined' && typeof LDRecord.stop === 'function') {
         await LDRecord.stop();
-        return true;
+        return { flushed: true, state };
       }
-      return false;
+      return { flushed: false, state };
     }, { name: persona.name, email: persona.email });
 
-    if (flushed) ok(`Session replay flushed (${persona.name})`);
-    else warn(`Session replay not active — skipped flush (${persona.name})`);
+    if (result.flushed) ok(`Session replay flushed (${persona.name})`);
+    else warn(`Session replay not active — skipped flush (${persona.name}, state=${result.state})`);
   } catch (err) {
     warn(`Session replay flush failed (${persona.name}): ${err.message}`);
   }
