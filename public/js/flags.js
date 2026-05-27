@@ -99,21 +99,27 @@ window.LDFlags = (function () {
     ldClient.on('change:' + key, callback);
   }
 
-  // Stop recording and upload the current session (call before closing the browser in load gen)
+  // Push the final replay payload (call before closing the browser in load gen).
+  // Do NOT call LDRecord.stop() — it sets NotRecording and removes unload listeners
+  // without running _save(), so headless Playwright sessions never reach LD.
   async function flushSessionReplay() {
     await ready;
-    if (typeof LDRecord === 'undefined' || typeof LDRecord.stop !== 'function') return false;
 
-    const deadline = Date.now() + 12000;
-    while (Date.now() < deadline) {
-      const state = LDRecord.getRecordingState?.();
-      if (state === 'Recording') break;
-      await new Promise((r) => setTimeout(r, 250));
-    }
+    const state = typeof LDRecord !== 'undefined' && LDRecord.getRecordingState
+      ? LDRecord.getRecordingState()
+      : 'unknown';
 
     try {
-      await LDRecord.stop();
-      console.log('[LD] Session replay stopped and flushed');
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pagehide'));
+      window.dispatchEvent(new Event('beforeunload'));
+
+      if (ldClient && typeof ldClient.flush === 'function') {
+        await ldClient.flush();
+      }
+
+      await new Promise((r) => setTimeout(r, 4000));
+      console.log('[LD] Session replay flush dispatched (state:', state, ')');
       return true;
     } catch (err) {
       console.warn('[LD] Session replay flush failed:', err.message);

@@ -52,53 +52,43 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function jitter(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-/** Stop LD Session Replay and wait for upload before closing the browser. */
+/** Push LD Session Replay data before the browser closes (headless skips real unload). */
 async function flushLdSessionReplay(page, persona) {
   try {
-    // Flush on the current page — navigating away first abandons the in-flight recording.
-    const onAppPage = /\/(search|destination|booking|vacation-mode|bookings|index)\.html/.test(page.url())
-      || page.url().endsWith('/');
-
-    if (!onAppPage) {
-      await page.goto('/search.html');
-      await page.waitForLoadState('domcontentloaded');
-      await sleep(3000);
-    }
-
     await page.waitForFunction(
       () => window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function',
       { timeout: 15000 },
     ).catch(() => {});
-    await sleep(1000);
 
     const result = await page.evaluate(async ({ name, email }) => {
       const state = typeof LDRecord !== 'undefined' && LDRecord.getRecordingState
         ? LDRecord.getRecordingState()
         : 'unknown';
-
       if (typeof LDRecord !== 'undefined' && typeof LDRecord.addSessionProperties === 'function') {
         try {
           LDRecord.addSessionProperties({ persona: name, personaEmail: email });
-        } catch { /* session may not be ready */ }
+        } catch { /* ignore */ }
       }
 
       if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
         const flushed = await window.LDFlags.flushSessionReplay();
         return { flushed, state };
       }
-      if (typeof LDRecord !== 'undefined' && typeof LDRecord.stop === 'function') {
-        await LDRecord.stop();
-        return { flushed: true, state };
-      }
       return { flushed: false, state };
     }, { name: persona.name, email: persona.email });
 
-    if (result.flushed) ok(`Session replay flushed (${persona.name})`);
-    else warn(`Session replay not active — skipped flush (${persona.name}, state=${result.state})`);
+    if (result.state === 'unknown') {
+      warn(`LD Session Replay not loaded (${persona.name}) — check LD_CLIENT_SIDE_ID`);
+    } else if (result.flushed) {
+      ok(`Session replay flushed (${persona.name}, ${result.state})`);
+    } else {
+      warn(`Session replay flush skipped (${persona.name}, state=${result.state})`);
+    }
   } catch (err) {
     warn(`Session replay flush failed (${persona.name}): ${err.message}`);
   }
-  await sleep(5000);
+
+  await sleep(2000);
 }
 
 // ── Personas ──────────────────────────────────────────────────────────────────
@@ -183,10 +173,11 @@ async function withBrowser(browserKey, persona, fn) {
   }, { runId: RUN_ID, personaEmail: persona.email });
   const page    = await context.newPage();
 
-  // Surface console errors to stderr for visibility
+  // Surface LD init/replay logs and errors in the load-gen terminal
   page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      process.stderr.write(`  [browser:${config.label}] console.error: ${msg.text()}\n`);
+    const text = msg.text();
+    if (msg.type() === 'error' || text.includes('[LD]')) {
+      process.stderr.write(`  [browser:${config.label}] ${text}\n`);
     }
   });
 
@@ -194,6 +185,9 @@ async function withBrowser(browserKey, persona, fn) {
     await fn(page, config.label);
     await flushLdSessionReplay(page, persona);
   } finally {
+    try {
+      await page.close({ runBeforeUnload: true });
+    } catch { /* already closed */ }
     await context.close();
     await browser.close();
   }
