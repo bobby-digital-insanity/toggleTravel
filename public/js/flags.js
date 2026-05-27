@@ -65,8 +65,14 @@ window.LDFlags = (function () {
         console.log('[LD] Observability plugin enabled');
       }
       if (typeof SessionReplay !== 'undefined' && SessionReplay.default) {
-        plugins.push(new SessionReplay.default());
-        console.log('[LD] Session Replay plugin enabled');
+        // LD defaults to privacySetting 'strict' (masks all text + images). Use 'none' for
+        // readable demo replays; switch to 'default' in production to mask PII inputs/patterns.
+        plugins.push(new SessionReplay.default({
+          privacySetting: 'none',
+          inlineStylesheet: true,
+          inlineImages: true,
+        }));
+        console.log('[LD] Session Replay plugin enabled (privacySetting: none)');
       }
 
       ldClient = LDClient.initialize(ldClientSideId, context, { plugins });

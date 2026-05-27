@@ -53,9 +53,21 @@ function jitter(min, max) { return Math.floor(Math.random() * (max - min + 1)) +
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 /** Stop LD Session Replay and wait for upload before closing the browser. */
-async function flushLdSessionReplay(page) {
+async function flushLdSessionReplay(page, persona) {
   try {
-    const flushed = await page.evaluate(async () => {
+    // Always tear down from search.html so LD SDK is loaded and recording is active
+    await page.goto('/search.html');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function',
+      { timeout: 15000 },
+    ).catch(() => {});
+    await sleep(2000);
+
+    const flushed = await page.evaluate(async ({ name, email }) => {
+      if (typeof LDRecord !== 'undefined' && typeof LDRecord.addSessionProperties === 'function') {
+        LDRecord.addSessionProperties({ persona: name, personaEmail: email });
+      }
       if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
         return window.LDFlags.flushSessionReplay();
       }
@@ -64,11 +76,12 @@ async function flushLdSessionReplay(page) {
         return true;
       }
       return false;
-    });
-    if (flushed) ok('Session replay flushed');
-    else warn('Session replay not active — skipped flush');
+    }, { name: persona.name, email: persona.email });
+
+    if (flushed) ok(`Session replay flushed (${persona.name})`);
+    else warn(`Session replay not active — skipped flush (${persona.name})`);
   } catch (err) {
-    warn(`Session replay flush failed: ${err.message}`);
+    warn(`Session replay flush failed (${persona.name}): ${err.message}`);
   }
   await sleep(5000);
 }
@@ -164,7 +177,7 @@ async function withBrowser(browserKey, persona, fn) {
 
   try {
     await fn(page, config.label);
-    await flushLdSessionReplay(page);
+    await flushLdSessionReplay(page, persona);
   } finally {
     await context.close();
     await browser.close();
@@ -252,40 +265,41 @@ async function abandonedCheckout(page, browserLabel, persona) {
   await maybeClickBanner(page);
   await sleep(jitter(600, 1000));
 
-  // View two destinations
-  const cards = page.locator('.card');
-  const count = await cards.count();
+  const destCount = Math.min(2, await page.locator('.card').count());
 
-  for (let i = 0; i < Math.min(2, count); i++) {
+  for (let i = 0; i < destCount; i++) {
+    // Fresh search each iteration — goBack() after booking is unreliable in headless
+    await page.goto('/search.html');
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+
     t = Date.now();
-    const card = cards.nth(i);
+    const card = page.locator('.card').nth(i);
     const name = await card.locator('h3, .card-title').textContent().catch(() => `card-${i}`);
     await card.click();
+    await page.waitForURL('**/destination.html**', { timeout: 10000 }).catch(() => {});
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
     ok(`Viewed destination: ${name.trim()} (${Date.now() - t}ms)`);
     await sleep(jitter(900, 1800));
 
-    // Try to reach the booking form on the first destination
     if (i === 0) {
       const bookBtn = page.locator('#book-btn');
-      if (await bookBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await bookBtn.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)) {
         t = Date.now();
-        await bookBtn.click();
+        await Promise.all([
+          page.waitForURL('**/booking.html**', { timeout: 8000 }),
+          bookBtn.click(),
+        ]).catch(() => {});
         await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
         ok(`Reached booking form (${Date.now() - t}ms)`);
         await sleep(jitter(1200, 2000));
-        // Walk away — navigate back without completing
-        await page.goBack();
         ok('Walked away from checkout (no booking)');
-        await sleep(jitter(400, 700));
       }
     }
-
-    if (i < Math.min(2, count) - 1) {
-      await page.goBack();
-      await sleep(jitter(500, 900));
-    }
   }
+
+  await page.goto('/search.html');
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  await sleep(1500);
 
   log('→ walked away (no booking)');
 }
