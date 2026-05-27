@@ -171,25 +171,10 @@ async function maybeClickBanner(page) {
 
 // ── Flows ─────────────────────────────────────────────────────────────────────
 
-/**
- * Identifies the persona in the LD browser SDK directly via page.evaluate().
- * More reliable than localStorage injection — avoids timing races with SDK init.
- * Silently skips if LDFlags.identify is not available (e.g. non-LD branches).
- */
-async function identifyInBrowser(page, email) {
-  try {
-    await page.waitForFunction(
-      () => window.LDFlags && window.LDFlags.ready,
-      { timeout: 5000 }
-    );
-    await page.evaluate(async (e) => {
-      await window.LDFlags.ready;
-      await window.LDFlags.identify(e);
-    }, email);
-  } catch {
-    // LDFlags not available on this branch — skip
-  }
-}
+// Persona is identified to LD via the `tt-persona-email` localStorage value
+// seeded by addInitScript before any page load — flags.js reads it and passes
+// it as the initial LD context key. Calling LDFlags.identify() afterwards with
+// the same key tears down the in-flight Session Replay recording, so we don't.
 
 /**
  * Window shopper: browses destinations, does a casual search, never books.
@@ -201,7 +186,6 @@ async function windowShopper(page, browserLabel, persona) {
   await page.goto('/search.html');
   ok(`Loaded /search.html (${Date.now() - t}ms)`);
 
-  await identifyInBrowser(page, persona.email);
   await maybeClickBanner(page);
   await sleep(jitter(800, 1400));
 
@@ -245,7 +229,6 @@ async function abandonedCheckout(page, browserLabel, persona) {
   await page.goto('/search.html');
   ok(`Loaded /search.html (${Date.now() - t}ms)`);
 
-  await identifyInBrowser(page, persona.email);
   await maybeClickBanner(page);
   await sleep(jitter(600, 1000));
 
@@ -484,7 +467,6 @@ async function errorFlow(page, browserLabel, persona) {
   // Load any page first so fetch() is available
   await page.goto('/search.html');
   await page.waitForLoadState('domcontentloaded');
-  await identifyInBrowser(page, persona.email);
 
   await badReq('POST', '/api/bookings', { travelers: 2 });                    // missing required fields → 400
   await badReq('GET',  '/api/destinations/dest-999', null);                   // unknown destination → 404
