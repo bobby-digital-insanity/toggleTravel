@@ -59,26 +59,32 @@ async function flushLdSessionReplay(page, persona) {
       () => window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function',
       { timeout: 15000 },
     ).catch(() => {});
+    await page.waitForFunction(
+      () => window.LDRecord && typeof window.LDRecord.getRecordingState === 'function',
+      { timeout: 15000 },
+    ).catch(() => {});
 
     const result = await page.evaluate(async ({ name, email }) => {
-      const state = typeof LDRecord !== 'undefined' && LDRecord.getRecordingState
-        ? LDRecord.getRecordingState()
-        : 'unknown';
-      if (typeof LDRecord !== 'undefined' && typeof LDRecord.addSessionProperties === 'function') {
+      const ld = window.LDRecord;
+      const state = ld && typeof ld.getRecordingState === 'function'
+        ? ld.getRecordingState()
+        : 'not-ready';
+
+      if (ld && typeof ld.addSessionProperties === 'function') {
         try {
-          LDRecord.addSessionProperties({ persona: name, personaEmail: email });
+          ld.addSessionProperties({ persona: name, personaEmail: email });
         } catch { /* ignore */ }
       }
 
       if (window.LDFlags && typeof window.LDFlags.flushSessionReplay === 'function') {
         const flushed = await window.LDFlags.flushSessionReplay();
-        return { flushed, state };
+        return { flushed, state, hasRecord: !!ld };
       }
-      return { flushed: false, state };
+      return { flushed: false, state, hasRecord: !!ld };
     }, { name: persona.name, email: persona.email });
 
-    if (result.state === 'unknown') {
-      warn(`LD Session Replay not loaded (${persona.name}) — check LD_CLIENT_SIDE_ID`);
+    if (!result.hasRecord) {
+      warn(`LDRecord not on window yet (${persona.name}) — replay may not upload`);
     } else if (result.flushed) {
       ok(`Session replay flushed (${persona.name}, ${result.state})`);
     } else {
