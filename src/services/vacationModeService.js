@@ -1,11 +1,9 @@
 'use strict';
 
-const Anthropic = require('@anthropic-ai/sdk');
+const anthropic = require('../anthropic');
 const logger = require('../logger');
 const destinations = require('../data/destinations.json');
 const { getFlag } = require('../launchdarkly');
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function toggle({ enabled, preferences = {}, bookingHistory = [], sessionId = 'anonymous' }) {
   const vacationModeEnabled = await getFlag('vacation-mode-enabled', true, sessionId);

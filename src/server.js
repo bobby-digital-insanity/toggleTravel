@@ -21,6 +21,7 @@ const searchRouter = require('./routes/search');
 const bookingsRouter = require('./routes/bookings');
 const vacationModeRouter = require('./routes/vacationMode');
 const demoRouter = require('./routes/demo');
+const aiPlannerRouter = require('./routes/aiPlanner');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,12 @@ app.use('/api/search', searchRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/vacation-mode', vacationModeRouter);
 app.use('/api/demo', demoRouter);
+app.use('/api/ai-planner', aiPlannerRouter);
+
+// AI Planner page (extensionless route)
+app.get('/ai-planner', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'ai-planner.html'));
+});
 
 // SPA fallback for client-side routing
 app.get('*', (req, res) => {

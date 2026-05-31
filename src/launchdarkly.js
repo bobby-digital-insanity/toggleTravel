@@ -37,4 +37,14 @@ function getClientSideId() {
   return process.env.LD_CLIENT_SIDE_ID || null;
 }
 
-module.exports = { init, getFlag, getClientSideId };
+function track(eventName, sessionId = 'anonymous', data = undefined, metricValue = undefined) {
+  if (!client) return;
+  const context = { kind: 'user', key: sessionId };
+  try {
+    client.track(eventName, context, data, metricValue);
+  } catch (err) {
+    logger.warn('ld_track_failed', { event: eventName, error: err.message });
+  }
+}
+
+module.exports = { init, getFlag, getClientSideId, track };

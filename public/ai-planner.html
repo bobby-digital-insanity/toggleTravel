@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Planner — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .planner-wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 56px; }
+
+    .planner-header { margin-bottom: 24px; }
+    .planner-header h1 { font-size: 2.2rem; font-weight: 900; letter-spacing: -.8px; margin-bottom: 6px; }
+    .planner-header p { color: var(--text-muted); font-size: 1.02rem; }
+
+    .chat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 560px;
+    }
+
+    .chat-window {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg { display: flex; flex-direction: column; gap: 4px; max-width: 78%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: .95rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .msg.user .msg-bubble {
+      background: var(--brand-primary);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.assistant .msg-bubble {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .agent-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      background: rgba(64, 91, 255, .1);
+      color: #405BFF;
+    }
+    .agent-badge.booking { background: rgba(245, 158, 11, .12); color: #b45309; }
+    .agent-badge.recommendation { background: rgba(16, 185, 129, .12); color: #047857; }
+    .agent-badge.intent { background: rgba(100, 116, 139, .12); color: #475569; }
+
+    .typing {
+      display: inline-flex;
+      gap: 4px;
+      padding: 14px 16px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      border-bottom-left-radius: 4px;
+      box-shadow: var(--shadow-sm);
+    }
+    .typing span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-light);
+      animation: typingDot 1.2s ease-in-out infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes typingDot {
+      0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    .composer {
+      display: flex;
+      gap: 10px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      background: white;
+    }
+    .composer input {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      font-size: .95rem;
+      font-family: inherit;
+      color: var(--text);
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .composer input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(0,87,184,.1); }
+    .composer button {
+      background: var(--brand-primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 0 22px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .composer button:hover:not(:disabled) { background: var(--brand-secondary); }
+    .composer button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .hint-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .hint-chip {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: .82rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .hint-chip:hover {
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+    }
+
+    .planner-error {
+      background: rgba(239, 68, 68, .08);
+      border: 1px solid rgba(239, 68, 68, .25);
+      color: #7f1d1d;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: .88rem;
+      margin-top: 12px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/vacation-mode.html">Vacation Mode</a></li>
+        <li><a href="/ai-planner">AI Planner</a></li>
+      </ul>
+      <button class="nav-vacation-badge off" id="vacation-badge" onclick="location.href='/vacation-mode.html'">
+        <span class="vacation-dot"></span>Vacation Mode: OFF
+      </button>
+    </div>
+  </nav>
+
+  <div class="planner-wrap">
+    <div class="planner-header">
+      <div class="eyebrow" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--brand-primary);margin-bottom:8px">Multi-Agent Pipeline</div>
+      <h1>AI Travel Planner</h1>
+      <p>Plan your next trip with our AI Travel Planner — powered by Anthropic and orchestrated by LaunchDarkly AgentControl.</p>
+    </div>
+
+    <div class="chat-card">
+      <div class="chat-window" id="chat-window">
+        <div class="msg assistant">
+          <span class="agent-badge">Concierge</span>
+          <div class="msg-bubble">Hi! I'm your AI travel planner. Tell me where you'd like to go (and where you're flying from), your dates, and your budget — I'll find flights and walk you through booking. What sounds good?</div>
+        </div>
+      </div>
+      <form class="composer" id="composer">
+        <input id="composer-input" type="text" placeholder="e.g. I want to fly from Denver to Miami next month, budget $400" autocomplete="off">
+        <button id="composer-send" type="submit">Send</button>
+      </form>
+    </div>
+
+    <div class="hint-row">
+      <button class="hint-chip" data-prompt="I want to fly from Denver to Miami next month, budget $400">✈ Denver → Miami, $400</button>
+      <button class="hint-chip" data-prompt="Find me a weekend flight from SFO to NYC under $300">🗽 SFO → NYC weekend</button>
+      <button class="hint-chip" data-prompt="I'm thinking Tokyo in March — flexible budget">🗼 Tokyo in March</button>
+    </div>
+
+    <div id="planner-error" class="planner-error"></div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel</span>
+      <span>Powered by Claude AI</span>
+    </div>
+  </footer>
+
+  <script src="/js/ldobservability.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/ldsessionreplay.min.js"></script>
+  <script src="/js/flags.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    (function () {
+      const win = document.getElementById('chat-window');
+      const form = document.getElementById('composer');
+      const input = document.getElementById('composer-input');
+      const sendBtn = document.getElementById('composer-send');
+      const errEl = document.getElementById('planner-error');
+
+      const sessionId = (function () {
+        let id = localStorage.getItem('tt-session-id');
+        if (!id) {
+          id = 'anon-' + Math.random().toString(36).slice(2, 10);
+          localStorage.setItem('tt-session-id', id);
+        }
+        return id;
+      })();
+
+      // Conversation history sent to the server on every turn (server is stateless)
+      const history = [];
+
+      function badgeClassFor(agent) {
+        if (!agent) return '';
+        const a = agent.toLowerCase();
+        if (a.includes('booking')) return 'booking';
+        if (a.includes('recommendation')) return 'recommendation';
+        if (a.includes('intent')) return 'intent';
+        return '';
+      }
+
+      function appendMessage({ role, content, agent }) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg ' + role;
+        if (role === 'assistant' && agent) {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge ' + badgeClassFor(agent);
+          badge.textContent = agent;
+          wrap.appendChild(badge);
+        }
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        bubble.textContent = content;
+        wrap.appendChild(bubble);
+        win.appendChild(wrap);
+        win.scrollTop = win.scrollHeight;
+      }
+
+      function showTyping() {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg assistant';
+        wrap.id = 'typing-indicator';
+        const typing = document.createElement('div');
+        typing.className = 'typing';
+        typing.innerHTML = '<span></span><span></span><span></span>';
+        wrap.appendChild(typing);
+        win.appendChild(wrap);
+        win.scrollTop = win.scrollHeight;
+      }
+
+      function hideTyping() {
+        const el = document.getElementById('typing-indicator');
+        if (el) el.remove();
+      }
+
+      function showError(msg) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+        setTimeout(() => { errEl.style.display = 'none'; }, 6000);
+      }
+
+      async function send(message) {
+        if (!message || !message.trim()) return;
+        appendMessage({ role: 'user', content: message });
+        history.push({ role: 'user', content: message });
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
+        showTyping();
+
+        try {
+          const res = await fetch('/api/ai-planner/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              conversationHistory: history,
+              sessionId,
+            }),
+          });
+          hideTyping();
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showError(data.error || ('Request failed (' + res.status + ')'));
+            return;
+          }
+          const data = await res.json();
+          appendMessage({ role: 'assistant', content: data.reply, agent: data.agentUsed });
+          history.push({ role: 'assistant', content: data.reply });
+          if (data.done) {
+            input.placeholder = 'Booking complete — start a new conversation';
+          }
+        } catch (err) {
+          hideTyping();
+          showError('Network error: ' + err.message);
+        } finally {
+          input.disabled = false;
+          sendBtn.disabled = false;
+          input.focus();
+        }
+      }
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        send(input.value);
+      });
+
+      document.querySelectorAll('.hint-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          send(chip.getAttribute('data-prompt'));
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
