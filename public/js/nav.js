@@ -150,12 +150,7 @@ function injectUserSelect() {
   const container = document.createElement('div');
   container.id = 'user-select';
   container.className = 'nav-user-select';
-  const vacationBadge = navInner.querySelector('#vacation-badge');
-  if (vacationBadge) {
-    navInner.insertBefore(container, vacationBadge);
-  } else {
-    navInner.appendChild(container);
-  }
+  navInner.appendChild(container);
   renderUserSelect();
 }
 
@@ -191,15 +186,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const navLinks = document.querySelector('.nav-links');
 
-  // show-vacation-mode-ui: hide the Vacation Mode nav link if flag is off
-  const showVacationMode = LDFlags.get('show-vacation-mode-ui');
-  if (!showVacationMode && navLinks) {
-    const vmLink = navLinks.querySelector('[href="/vacation-mode.html"]');
-    if (vmLink) vmLink.closest('li').remove();
-    const badge = document.getElementById('vacation-badge');
-    if (badge) badge.style.display = 'none';
-  }
-
   // show-demo-panel: inject Load Gen nav link only if flag is on
   const showDemoPanel = LDFlags.get('show-demo-panel');
   if (showDemoPanel && navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
@@ -225,13 +211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Vacation mode badge
-  updateVacationBadge();
-
   // Real-time flag updates
-  LDFlags.onChange('show-vacation-mode-ui', (newValue) => {
-    location.reload();
-  });
   LDFlags.onChange('promo-banner-text', (newValue) => {
     const existing = document.getElementById('promo-banner');
     if (newValue) {
@@ -246,15 +226,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-function updateVacationBadge() {
-  const badge = document.getElementById('vacation-badge');
-  if (!badge) return;
-  const on = localStorage.getItem('vacationModeEnabled') === 'true';
-  badge.className = `nav-vacation-badge ${on ? 'on' : 'off'}`;
-  badge.innerHTML = `<span class="vacation-dot"></span>${on ? 'Vacation Mode: ON' : 'Vacation Mode: OFF'}`;
-}
-
-window.updateVacationBadge = updateVacationBadge;
 window.ToggleUser = {
   TIERS: TT_USER_TIERS,
   getCurrentUser,

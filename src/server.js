@@ -19,7 +19,6 @@ const healthRouter = require('./routes/health');
 const destinationsRouter = require('./routes/destinations');
 const searchRouter = require('./routes/search');
 const bookingsRouter = require('./routes/bookings');
-const vacationModeRouter = require('./routes/vacationMode');
 const demoRouter = require('./routes/demo');
 const aiPlannerRouter = require('./routes/aiPlanner');
 
@@ -53,7 +52,6 @@ app.get('/api/config', (req, res) => {
 app.use('/api/destinations', destinationsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/bookings', bookingsRouter);
-app.use('/api/vacation-mode', vacationModeRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/ai-planner', aiPlannerRouter);
 

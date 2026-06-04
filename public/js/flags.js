@@ -11,7 +11,6 @@ window.LDFlags = (function () {
   const ready = new Promise((r) => { readyResolve = r; });
 
   const DEFAULTS = {
-    'show-vacation-mode-ui': true,
     'show-demo-panel':        true,
     'featured-destinations':  [],
     'booking-flow-variant':   'standard',

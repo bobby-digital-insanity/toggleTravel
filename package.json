@@ -1,7 +1,7 @@
 {
   "name": "toggle-travel",
   "version": "1.0.0",
-  "description": "Toggle Travel - A demo travel booking site with AI Vacation Mode",
+  "description": "Toggle Travel - A demo travel booking site with AI Planner",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

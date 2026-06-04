@@ -10,7 +10,6 @@
  *   windowShopper      — browse destinations, casual search, no booking
  *   abandonedCheckout  — search, view destinations, reach checkout, walk away
  *   completeBooking    — full happy path: search → view → book → confirm
- *   vacationModeSession — enable AI vacation mode, read recommendations, disable
  *   errorFlow          — intentional bad requests to generate 4xx/error signals
  *
  * Usage:
@@ -433,73 +432,6 @@ async function completeBooking(page, browserLabel, persona) {
 }
 
 /**
- * Vacation mode: enable AI feature, read recommendations, optionally click through, disable.
- */
-async function vacationModeSession(page, browserLabel, persona) {
-  section(`[${persona.name} / ${browserLabel}] Vacation Mode`);
-
-  let t = Date.now();
-  await page.goto('/vacation-mode.html');
-  ok(`Loaded /vacation-mode.html (${Date.now() - t}ms)`);
-  await sleep(jitter(600, 1000));
-
-  // Toggle on
-  const toggle = page.locator('label.vm-switch, #vm-toggle-label, label[for="vm-toggle"]').first();
-  if (!(await toggle.isVisible({ timeout: 5000 }).catch(() => false))) {
-    warn('Vacation mode toggle not found, skipping');
-    return;
-  }
-
-  t = Date.now();
-  await toggle.click();
-  ok(`Enabled vacation mode (${Date.now() - t}ms) — waiting for AI response…`);
-
-  // Wait for AI response (can take up to 45s)
-  const vmResponse = page.locator('#vm-response');
-  try {
-    await vmResponse.waitFor({ state: 'visible', timeout: 45000 });
-    ok(`AI response received (${Date.now() - t}ms)`);
-  } catch {
-    warn(`AI response timed out after ${Date.now() - t}ms, continuing`);
-    return;
-  }
-
-  // Read persona label if present
-  const personaEl = page.locator('#vm-persona');
-  if (await personaEl.isVisible({ timeout: 1000 }).catch(() => false)) {
-    const personaText = await personaEl.textContent().catch(() => '');
-    ok(`AI persona: ${personaText.trim()}`);
-  }
-
-  // Simulate reading the AI output
-  await sleep(jitter(2500, 4000));
-
-  // Click first recommended destination if available
-  const recLink = page.locator('#vm-recs-grid a.card, #vm-recs-grid .card').first();
-  if (await recLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-    t = Date.now();
-    await recLink.click();
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    ok(`Clicked recommended destination (${Date.now() - t}ms)`);
-    await sleep(jitter(800, 1400));
-    await page.goBack();
-    await sleep(jitter(400, 700));
-  }
-
-  // Toggle off
-  t = Date.now();
-  await toggle.click();
-
-  const farewell = page.locator('#vm-farewell');
-  try {
-    await farewell.waitFor({ state: 'visible', timeout: 15000 });
-    ok(`Vacation mode disabled — farewell shown (${Date.now() - t}ms)`);
-  } catch {
-    ok(`Vacation mode disabled (${Date.now() - t}ms)`);
-  }
-}
-
-/**
  * Error flow: direct API calls with bad inputs to generate 4xx error signals.
  */
 async function errorFlow(page, browserLabel, persona) {
@@ -529,7 +461,6 @@ async function errorFlow(page, browserLabel, persona) {
   await badReq('POST', '/api/bookings', { travelers: 2 });                    // missing required fields → 400
   await badReq('GET',  '/api/destinations/dest-999', null);                   // unknown destination → 404
   await badReq('GET',  '/api/bookings/bk-INVALID', null);                     // unknown booking → 404
-  await badReq('POST', '/api/vacation-mode', { preferences: {} });            // missing enabled → 400
 }
 
 // ── Round orchestration ───────────────────────────────────────────────────────
