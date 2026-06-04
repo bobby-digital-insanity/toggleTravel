@@ -35,7 +35,15 @@ window.LDFlags = (function () {
         return;
       }
 
-      const context = { kind: 'user', key: getSessionKey() };
+      const tier      = localStorage.getItem('tt-user-tier');
+      const tierEmail = localStorage.getItem('tt-user-email');
+      const tierName  = localStorage.getItem('tt-user-name');
+      const context = {
+        kind: 'user',
+        key: tierEmail || getSessionKey(),
+        ...(tierName ? { name: tierName } : {}),
+        ...(tier ? { tier } : {}),
+      };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
@@ -66,5 +74,18 @@ window.LDFlags = (function () {
     ldClient.on('change:' + key, callback);
   }
 
-  return { init, get, onChange };
+  // Re-identify the LD context (e.g. when the user select changes)
+  async function identify(key, extras = {}) {
+    if (!key || !ldClient) return;
+    try {
+      const ctx = { kind: 'user', key, ...extras };
+      if (!ctx.name && key.includes('@')) ctx.name = key;
+      await ldClient.identify(ctx);
+      console.log('[LD] Identified:', key, extras);
+    } catch (err) {
+      console.warn('[LD] identify failed:', err.message);
+    }
+  }
+
+  return { init, get, onChange, identify };
 }());

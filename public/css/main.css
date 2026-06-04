@@ -137,6 +137,148 @@ img { max-width: 100%; display: block; }
   background: currentColor;
 }
 
+/* User select — injected by nav.js */
+.nav-user-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+.nav-user-btn--signin {
+  color: var(--brand-primary);
+  border: 1.5px solid var(--brand-primary);
+}
+
+.nav-user-btn--signin:hover {
+  background: var(--brand-primary);
+  color: white;
+}
+
+.nav-user-btn--signedin {
+  color: var(--tier-color, var(--text));
+  border: 1.5px solid var(--tier-color, var(--border));
+}
+
+.nav-user-btn--signedin:hover {
+  background: color-mix(in srgb, var(--tier-color) 8%, transparent);
+}
+
+.nav-user-caret {
+  font-size: .7rem;
+  opacity: .7;
+}
+
+.tier-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.nav-user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-user-menu-header {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-light);
+  padding: 8px 12px 4px;
+}
+
+.nav-user-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+}
+
+.nav-user-option:hover {
+  background: var(--surface-2);
+}
+
+.nav-user-option--active {
+  background: var(--surface-2);
+}
+
+.nav-user-option--active::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+
+.nav-user-option-name {
+  flex: 1;
+}
+
+.nav-user-option-tier {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--text-light);
+}
+
+.nav-user-option--active .nav-user-option-tier {
+  display: none;
+}
+
+.nav-user-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.nav-user-option--signout {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.nav-user-option--signout:hover {
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+}
+
 /* Vendor badge — injected by nav.js on vendor branches */
 .nav-vendor-badge {
   display: flex;
