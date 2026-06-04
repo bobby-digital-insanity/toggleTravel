@@ -150,12 +150,7 @@ function injectUserSelect() {
   const container = document.createElement('div');
   container.id = 'user-select';
   container.className = 'nav-user-select';
-  const vacationBadge = navInner.querySelector('#vacation-badge');
-  if (vacationBadge) {
-    navInner.insertBefore(container, vacationBadge);
-  } else {
-    navInner.appendChild(container);
-  }
+  navInner.appendChild(container);
   renderUserSelect();
 }
 
@@ -226,9 +221,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Vacation mode badge
-  updateVacationBadge();
-
   // Real-time flag updates
   LDFlags.onChange('promo-banner-text', (newValue) => {
     const existing = document.getElementById('promo-banner');
@@ -244,15 +236,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-function updateVacationBadge() {
-  const badge = document.getElementById('vacation-badge');
-  if (!badge) return;
-  const on = localStorage.getItem('vacationModeEnabled') === 'true';
-  badge.className = `nav-vacation-badge ${on ? 'on' : 'off'}`;
-  badge.innerHTML = `<span class="vacation-dot"></span>${on ? 'Vacation Mode: ON' : 'Vacation Mode: OFF'}`;
-}
-
-window.updateVacationBadge = updateVacationBadge;
 window.ToggleUser = {
   TIERS: TT_USER_TIERS,
   getCurrentUser,

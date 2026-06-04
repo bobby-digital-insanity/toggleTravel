@@ -8,7 +8,6 @@ window.LDFlags = (function () {
   let ldClient = null;
 
   const DEFAULTS = {
-    'show-vacation-mode-ui': true,
     'show-demo-panel':        true,
     'featured-destinations':  [],
     'booking-flow-variant':   'standard',
