@@ -49,12 +49,16 @@ window.LDFlags = (function () {
 
       const runId       = localStorage.getItem('tt-run-id');
       const personaEmail = localStorage.getItem('tt-persona-email');
-      const key          = personaEmail || getSessionKey();
+      const tier         = localStorage.getItem('tt-user-tier');
+      const tierEmail    = localStorage.getItem('tt-user-email');
+      const tierName     = localStorage.getItem('tt-user-name');
+      const key          = tierEmail || personaEmail || getSessionKey();
       const context      = {
         kind: 'user',
         key,
-        name: personaEmail || runId || undefined,
+        name: tierName || personaEmail || runId || undefined,
         ...(runId ? { loadRunId: runId } : {}),
+        ...(tier ? { tier } : {}),
       };
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
@@ -126,8 +130,8 @@ window.LDFlags = (function () {
     }
   }
 
-  // Identify a known user — call when their email becomes known (e.g. booking form)
-  async function identify(email) {
+  // Identify a known user — call when their email becomes known (e.g. booking form, user select)
+  async function identify(email, extras = {}) {
     if (!email) return;
     // Load-gen personas are already the LD context key via tt-persona-email; re-identify tears down replay
     if (isLoadGen()) return;
@@ -135,9 +139,9 @@ window.LDFlags = (function () {
     if (!ldClient) return;
     try {
       const runId = localStorage.getItem('tt-run-id');
-      const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}) };
+      const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}), ...extras };
       await ldClient.identify(ctx);
-      console.log('[LD] Identified user:', email);
+      console.log('[LD] Identified user:', email, extras);
     } catch (err) {
       console.warn('[LD] identify failed:', err.message);
     }
