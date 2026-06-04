@@ -2,8 +2,6 @@
   --brand-primary: #0057b8;
   --brand-secondary: #003d82;
   --brand-accent: #f59e0b;
-  --vacation-glow: #f59e0b;
-  --vacation-off: #6b7280;
   --bg: #f8fafc;
   --surface: #ffffff;
   --surface-2: #f1f5f9;
@@ -96,45 +94,6 @@ img { max-width: 100%; display: block; }
   background: var(--surface-2);
   color: var(--brand-primary);
   text-decoration: none;
-}
-
-.nav-vacation-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: .82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition);
-  white-space: nowrap;
-  border: none;
-  background: none;
-}
-
-.nav-vacation-badge.off {
-  color: var(--vacation-off);
-  border: 1.5px solid var(--border);
-}
-
-.nav-vacation-badge.on {
-  color: var(--vacation-glow);
-  border: 1.5px solid var(--vacation-glow);
-  box-shadow: 0 0 12px rgba(245,158,11,.25);
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 12px rgba(245,158,11,.25); }
-  50% { box-shadow: 0 0 24px rgba(245,158,11,.5); }
-}
-
-.vacation-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 /* User select — injected by nav.js */
@@ -302,15 +261,6 @@ img { max-width: 100%; display: block; }
   display: block;
 }
 
-.nav-vacation-badge.on .vacation-dot {
-  animation: blink 1.5s ease-in-out infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .3; }
-}
-
 /* ── Hero ── */
 .hero {
   position: relative;
@@ -457,21 +407,6 @@ img { max-width: 100%; display: block; }
 .btn-outline:hover {
   background: var(--brand-primary);
   color: white;
-  text-decoration: none;
-}
-
-.btn-vacation {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  font-size: 1.05rem;
-  padding: 14px 32px;
-  border-radius: 999px;
-  box-shadow: 0 4px 20px rgba(245,158,11,.4);
-}
-
-.btn-vacation:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(245,158,11,.55);
   text-decoration: none;
 }
 

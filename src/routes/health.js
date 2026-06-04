@@ -10,15 +10,11 @@ router.get('/health', (req, res) => {
 });
 
 router.get('/ready', async (req, res) => {
-  const checks = { destinations: false, anthropic: false };
+  const checks = { destinations: false };
 
   try {
     require('../data/destinations.json');
     checks.destinations = true;
-  } catch {}
-
-  try {
-    if (process.env.ANTHROPIC_API_KEY) checks.anthropic = true;
   } catch {}
 
   const ready = Object.values(checks).every(Boolean);
