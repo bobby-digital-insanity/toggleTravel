@@ -18,13 +18,19 @@ function getCurrentUser() {
 }
 
 function setCurrentUser(tierKey) {
+  const tier = TT_USER_TIERS.find((t) => t.key === tierKey);
+  if (!tier) return;
   localStorage.setItem(TT_USER_STORAGE_KEY, tierKey);
+  localStorage.setItem('tt-user-email', tier.email);
+  localStorage.setItem('tt-user-name', tier.name);
   renderUserSelect();
   window.dispatchEvent(new CustomEvent('tt:user-changed', { detail: getCurrentUser() }));
 }
 
 function signOutUser() {
   localStorage.removeItem(TT_USER_STORAGE_KEY);
+  localStorage.removeItem('tt-user-email');
+  localStorage.removeItem('tt-user-name');
   renderUserSelect();
   window.dispatchEvent(new CustomEvent('tt:user-changed', { detail: null }));
 }
