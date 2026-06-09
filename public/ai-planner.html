@@ -165,6 +165,33 @@
       margin-top: 12px;
       display: none;
     }
+
+    .coming-soon-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 72px 32px;
+      text-align: center;
+    }
+    .coming-soon-icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .coming-soon-card h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -.4px;
+      margin-bottom: 10px;
+    }
+    .coming-soon-card p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      max-width: 380px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
@@ -188,26 +215,34 @@
       <p>Plan your next trip with our AI Travel Planner — powered by Anthropic and orchestrated by LaunchDarkly AgentControl.</p>
     </div>
 
-    <div class="chat-card">
-      <div class="chat-window" id="chat-window">
-        <div class="msg assistant">
-          <span class="agent-badge">Concierge</span>
-          <div class="msg-bubble">Hi! I'm your AI travel planner. Tell me where you'd like to go (and where you're flying from), your dates, and your budget — I'll find flights and walk you through booking. What sounds good?</div>
+    <div id="planner-enabled-view" hidden>
+      <div class="chat-card">
+        <div class="chat-window" id="chat-window">
+          <div class="msg assistant">
+            <span class="agent-badge">Concierge</span>
+            <div class="msg-bubble">Hi! I'm your AI travel planner. Tell me where you'd like to go (and where you're flying from), your dates, and your budget — I'll find flights and walk you through booking. What sounds good?</div>
+          </div>
         </div>
+        <form class="composer" id="composer">
+          <input id="composer-input" type="text" placeholder="e.g. I want to fly from Denver to Miami next month, budget $400" autocomplete="off">
+          <button id="composer-send" type="submit">Send</button>
+        </form>
       </div>
-      <form class="composer" id="composer">
-        <input id="composer-input" type="text" placeholder="e.g. I want to fly from Denver to Miami next month, budget $400" autocomplete="off">
-        <button id="composer-send" type="submit">Send</button>
-      </form>
+
+      <div class="hint-row">
+        <button class="hint-chip" data-prompt="I want to fly from Denver to Miami next month, budget $400">✈ Denver → Miami, $400</button>
+        <button class="hint-chip" data-prompt="Find me a weekend flight from SFO to NYC under $300">🗽 SFO → NYC weekend</button>
+        <button class="hint-chip" data-prompt="I'm thinking Tokyo in March — flexible budget">🗼 Tokyo in March</button>
+      </div>
+
+      <div id="planner-error" class="planner-error"></div>
     </div>
 
-    <div class="hint-row">
-      <button class="hint-chip" data-prompt="I want to fly from Denver to Miami next month, budget $400">✈ Denver → Miami, $400</button>
-      <button class="hint-chip" data-prompt="Find me a weekend flight from SFO to NYC under $300">🗽 SFO → NYC weekend</button>
-      <button class="hint-chip" data-prompt="I'm thinking Tokyo in March — flexible budget">🗼 Tokyo in March</button>
+    <div id="planner-disabled-view" class="coming-soon-card" hidden>
+      <span class="coming-soon-icon">✨</span>
+      <h2>Coming Soon</h2>
+      <p>The AI Travel Planner is currently unavailable. Check back soon!</p>
     </div>
-
-    <div id="planner-error" class="planner-error"></div>
   </div>
 
   <footer class="footer">
@@ -231,6 +266,20 @@
   <script src="/js/nav.js"></script>
   <script>
     (function () {
+      const enabledView = document.getElementById('planner-enabled-view');
+      const disabledView = document.getElementById('planner-disabled-view');
+
+      function applyFlag(enabled) {
+        enabledView.hidden = !enabled;
+        disabledView.hidden = !!enabled;
+      }
+
+      (async () => {
+        await LDFlags.init();
+        applyFlag(LDFlags.get('ai-planner-enabled'));
+        LDFlags.onChange('ai-planner-enabled', applyFlag);
+      })();
+
       const win = document.getElementById('chat-window');
       const form = document.getElementById('composer');
       const input = document.getElementById('composer-input');
