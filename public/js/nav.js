@@ -154,7 +154,10 @@ function injectUserSelect() {
   renderUserSelect();
 }
 
-// ── LaunchDarkly vendor badge ───────────────────────────────────────────────
+// ── Synchronous nav hydration ───────────────────────────────────────────────
+// Runs at script parse, before first paint, so the nav lands in its final
+// layout immediately. Avoids the visible reflow when the user-select pops in
+// later after LD init.
 (function injectVendorBadge() {
   const navInner = document.querySelector('.nav-inner');
   if (!navInner) return;
@@ -164,25 +167,36 @@ function injectUserSelect() {
   badge.innerHTML = '<img src="/img/LaunchDarkly_Logo_1.png" alt="LaunchDarkly" style="height:20px;width:auto;display:block;">';
   navInner.appendChild(badge);
 }());
+
+injectUserSelect();
+
+// Active nav link — pure location/DOM, no LD dependency
+(function highlightActiveLink() {
+  document.querySelectorAll('.nav-links a').forEach((link) => {
+    if (link.href === location.href || location.pathname.startsWith(new URL(link.href).pathname) && new URL(link.href).pathname !== '/') {
+      link.classList.add('active');
+    }
+    if (link.href === location.origin + '/' && location.pathname === '/') {
+      link.classList.add('active');
+    }
+  });
+}());
+
+// LDFlags.identify internally awaits its own ready promise, so it's safe to
+// wire this before LD has initialized.
+window.addEventListener('tt:user-changed', async (e) => {
+  const user = e.detail;
+  if (user) {
+    await LDFlags.identify(user.email, { tier: user.key });
+  } else {
+    const anonKey = localStorage.getItem('tt-session-id');
+    if (anonKey) await LDFlags.identify(anonKey);
+  }
+});
 // ───────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Initialize LaunchDarkly client SDK before applying flags
   await LDFlags.init();
-
-  // User select (after LD init so tier from localStorage was already picked up by initial context)
-  injectUserSelect();
-
-  // Re-identify the LD context when the user picks a different tier
-  window.addEventListener('tt:user-changed', async (e) => {
-    const user = e.detail;
-    if (user) {
-      await LDFlags.identify(user.email, { tier: user.key });
-    } else {
-      const anonKey = localStorage.getItem('tt-session-id');
-      if (anonKey) await LDFlags.identify(anonKey);
-    }
-  });
 
   const navLinks = document.querySelector('.nav-links');
 
@@ -199,17 +213,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (promoText) {
     document.body.insertBefore(buildPromoBanner(promoText), document.body.firstChild);
   }
-
-  // Active nav link
-  const links = document.querySelectorAll('.nav-links a');
-  links.forEach((link) => {
-    if (link.href === location.href || location.pathname.startsWith(new URL(link.href).pathname) && new URL(link.href).pathname !== '/') {
-      link.classList.add('active');
-    }
-    if (link.href === location.origin + '/' && location.pathname === '/') {
-      link.classList.add('active');
-    }
-  });
 
   // Real-time flag updates
   LDFlags.onChange('promo-banner-text', (newValue) => {
