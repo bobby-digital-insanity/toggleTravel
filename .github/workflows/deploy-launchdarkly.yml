@@ -38,6 +38,9 @@ jobs:
             sudo mkdir -p /var/lib/toggle-travel
             sudo chown ec2-user:ec2-user /var/lib/toggle-travel
 
+            echo "=== Ensuring native build tools are present (for better-sqlite3) ==="
+            command -v make >/dev/null && command -v g++ >/dev/null || sudo dnf install -y gcc-c++ make python3
+
             echo "=== Injecting secrets into .env ==="
             sed -i '/^LD_SDK_KEY=/d' .env
             sed -i '/^LD_CLIENT_SIDE_ID=/d' .env
