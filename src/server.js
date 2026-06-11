@@ -4,6 +4,7 @@ require('dotenv').config();
 
 // Must be required before express for LD Observability auto-instrumentation
 const ld = require('./launchdarkly');
+const db = require('./db');
 
 const express = require('express');
 const cors = require('cors');
@@ -72,6 +73,7 @@ app.get('*', (req, res) => {
 app.use(errorHandler);
 
 ld.init().then(() => {
+  db.init();
   app.listen(PORT, () => {
     logger.info('server_started', { port: PORT, env: process.env.NODE_ENV || 'development' });
   });

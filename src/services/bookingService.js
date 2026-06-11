@@ -2,11 +2,26 @@
 
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../logger');
+const db = require('../db');
 const { authorizePayment } = require('./externalMockService');
 const destinationService = require('./destinationService');
 
-// In-memory bookings store
-const bookings = new Map();
+function rowToBooking(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    destinationId: row.destination_id,
+    destinationName: row.destination_name,
+    travelers: row.travelers,
+    departureDate: row.departure_date,
+    returnDate: row.return_date,
+    contactEmail: row.contact_email,
+    totalAmount: row.total_amount,
+    transactionId: row.transaction_id,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
 
 async function create({ destinationId, travelers, departureDate, returnDate, contactEmail, sessionId }) {
   const bookingId = `bk-${uuidv4().slice(0, 8).toUpperCase()}`;
@@ -47,7 +62,25 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
     createdAt: new Date().toISOString(),
   };
 
-  bookings.set(bookingId, booking);
+  db.run(
+    `INSERT INTO bookings (id, destination_id, destination_name, travelers, departure_date, return_date,
+      contact_email, total_amount, transaction_id, status, created_at)
+     VALUES (@id, @destination_id, @destination_name, @travelers, @departure_date, @return_date,
+       @contact_email, @total_amount, @transaction_id, @status, @created_at)`,
+    {
+      id: booking.id,
+      destination_id: booking.destinationId,
+      destination_name: booking.destinationName,
+      travelers: booking.travelers,
+      departure_date: booking.departureDate,
+      return_date: booking.returnDate,
+      contact_email: booking.contactEmail,
+      total_amount: booking.totalAmount,
+      transaction_id: booking.transactionId,
+      status: booking.status,
+      created_at: booking.createdAt,
+    }
+  );
 
   logger.info('booking_created', {
     booking_id: bookingId,
@@ -63,19 +96,18 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
 }
 
 function getById(id) {
-  const booking = bookings.get(id);
-  if (!booking) {
+  const row = db.get('SELECT * FROM bookings WHERE id = @id', { id });
+  if (!row) {
     const err = new Error(`Booking not found: ${id}`);
     err.status = 404;
     throw err;
   }
-  return booking;
+  return rowToBooking(row);
 }
 
 function list() {
-  return Array.from(bookings.values()).sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
+  const rows = db.all('SELECT * FROM bookings ORDER BY created_at DESC');
+  return rows.map(rowToBooking);
 }
 
 module.exports = { create, getById, list };

@@ -7,3 +7,7 @@ dist/
 CLAUDE_NOTES.md
 *_NOTES.md
 DD_AGENT_CONFIG.yaml
+data/
+*.db
+*.db-shm
+*.db-wal

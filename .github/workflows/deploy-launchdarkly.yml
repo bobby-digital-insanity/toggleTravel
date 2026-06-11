@@ -13,6 +13,7 @@ jobs:
     env:
       LD_SDK_KEY: ${{ secrets.LD_SDK_KEY_LD }}
       LD_CLIENT_SIDE_ID: ${{ secrets.LD_CLIENT_SIDE_ID_LD }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_LD }}
 
     steps:
       - name: Deploy & Verify
@@ -22,7 +23,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_LD }}
           port: 22
-          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,ANTHROPIC_API_KEY
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -33,11 +34,19 @@ jobs:
             git reset --hard HEAD
             git pull origin launchdarkly
 
-            echo "=== Injecting LaunchDarkly keys into .env ==="
+            echo "=== Ensuring persistent data directory exists ==="
+            sudo mkdir -p /var/lib/toggle-travel
+            sudo chown ec2-user:ec2-user /var/lib/toggle-travel
+
+            echo "=== Injecting secrets into .env ==="
             sed -i '/^LD_SDK_KEY=/d' .env
             sed -i '/^LD_CLIENT_SIDE_ID=/d' .env
+            sed -i '/^ANTHROPIC_API_KEY=/d' .env
+            sed -i '/^DB_PATH=/d' .env
             echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
             echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env
+            echo "DB_PATH=/var/lib/toggle-travel/toggle.db" >> .env
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
