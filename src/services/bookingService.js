@@ -36,6 +36,19 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
   const dest = await destinationService.getById(destinationId);
   const totalAmount = dest.basePrice * travelers;
 
+  // Atlantis is unreachable — surface a 404 to demo LD Observability's Errors view
+  if (destinationId === 'dest-013') {
+    logger.error('booking_failed_destination_unreachable', {
+      ...logCtx,
+      destination_name: dest.name,
+      contact_email: contactEmail,
+      quoted_amount: totalAmount,
+    });
+    const err = new Error(`Destination unreachable: ${dest.name} is not currently bookable`);
+    err.status = 404;
+    throw err;
+  }
+
   // Stage 2: payment authorization
   const payStart = Date.now();
   let payment;

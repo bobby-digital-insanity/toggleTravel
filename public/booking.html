@@ -392,9 +392,47 @@
         btn.textContent = 'Confirm & Pay →';
         spinner.style.display = 'none';
         errorEl.style.display = '';
-        errorEl.innerHTML = err.status === 402
-          ? '💳 Payment authorization declined. Please try again — this is a simulated 5% failure rate for demo purposes.'
-          : `⚠ Booking failed: ${err.message}`;
+
+        // Send the error to LD Observability so it appears on the Errors page,
+        // grouped by message with the destination + amount as metadata.
+        try {
+          if (window.Observability && Observability.LDObserve) {
+            Observability.LDObserve.recordError(err, undefined, {
+              destination_id: destinationId,
+              destination_name: document.getElementById('summary-dest')?.textContent,
+              quoted_amount: document.getElementById('sum-total')?.textContent,
+              http_status: err.status,
+              trace_id: err.traceId,
+              page: 'booking',
+              stage: 'confirm_and_pay',
+            });
+          }
+        } catch (_) { /* never block UI on telemetry */ }
+
+        if (err.status === 404) {
+          const traceLine = err.traceId
+            ? `<div style="font-family:monospace;font-size:.78rem;color:rgba(255,255,255,.7);margin-top:14px">Trace: ${err.traceId.slice(0, 16)}…</div>`
+            : '';
+          errorEl.removeAttribute('class');
+          errorEl.style.cssText = 'display:block;background:linear-gradient(135deg,#7a1d1d,#3a0d0d);color:#fff;border-radius:var(--radius);padding:28px;margin-bottom:16px;box-shadow:0 8px 24px rgba(122,29,29,.3)';
+          errorEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="font-size:1.6rem">❌</span>
+              <strong style="font-size:1.5rem;font-weight:900;letter-spacing:-.3px">404 — Destination Not Found</strong>
+            </div>
+            <p style="font-size:1rem;line-height:1.55;margin:0 0 16px;color:rgba(255,255,255,.92)">${err.message}</p>
+            ${traceLine}
+            <div style="margin-top:18px">
+              <a href="/search.html" class="btn" style="background:#fff;color:#7a1d1d;font-weight:700">Browse other destinations</a>
+            </div>
+          `;
+        } else {
+          errorEl.className = 'alert alert-error';
+          errorEl.style.cssText = 'display:block;margin-bottom:16px';
+          errorEl.innerHTML = err.status === 402
+            ? '💳 Payment authorization declined. Please try again — this is a simulated 5% failure rate for demo purposes.'
+            : `⚠ Booking failed: ${err.message}`;
+        }
       }
     }
   </script>
