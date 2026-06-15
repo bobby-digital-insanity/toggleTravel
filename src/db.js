@@ -22,7 +22,7 @@ function init() {
   db.pragma('foreign_keys = ON');
 
   migrate();
-  seedDestinationsIfEmpty();
+  seedDestinations();
 
   logger.info('db_initialized', { path: DB_PATH });
   return db;
@@ -70,21 +70,25 @@ function migrate() {
   `);
 }
 
-function seedDestinationsIfEmpty() {
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM destinations').get();
-  if (count > 0) return;
-
+function seedDestinations() {
+  // Idempotent: INSERT OR IGNORE picks up new destinations added to the JSON
+  // without overwriting existing rows. Run on every boot.
   const seed = require('./data/destinations.json');
   const insert = db.prepare(`
-    INSERT INTO destinations (id, name, region, tagline, description, base_price, currency,
+    INSERT OR IGNORE INTO destinations (id, name, region, tagline, description, base_price, currency,
       hero_image, activities, best_season, weather_summary, rating, duration, highlights)
     VALUES (@id, @name, @region, @tagline, @description, @base_price, @currency,
       @hero_image, @activities, @best_season, @weather_summary, @rating, @duration, @highlights)
   `);
   const tx = db.transaction((rows) => {
-    for (const r of rows) insert.run(r);
+    let inserted = 0;
+    for (const r of rows) {
+      const result = insert.run(r);
+      if (result.changes > 0) inserted += 1;
+    }
+    return inserted;
   });
-  tx(seed.map((d) => ({
+  const inserted = tx(seed.map((d) => ({
     id: d.id,
     name: d.name,
     region: d.region,
@@ -101,7 +105,7 @@ function seedDestinationsIfEmpty() {
     highlights: JSON.stringify(d.highlights || []),
   })));
 
-  logger.info('db_seeded', { table: 'destinations', rows: seed.length });
+  if (inserted > 0) logger.info('db_seeded', { table: 'destinations', rows_inserted: inserted });
 }
 
 function operationOf(sql) {
