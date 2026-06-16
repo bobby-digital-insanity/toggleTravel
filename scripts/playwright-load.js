@@ -129,6 +129,16 @@ const PERSONAS = [
     timezone:   'Asia/Tokyo',
     geolocation: { latitude: 35.68, longitude: 139.69 },
   },
+  {
+    name:       'Poseidon',
+    email:      'poseidon@demo.toggletravel.io',
+    budget:     'luxury',
+    styles:     ['ocean', 'mythology'],
+    region:     'oceania',
+    locale:     'el-GR',
+    timezone:   'Europe/Athens',
+    geolocation: { latitude: 37.98, longitude: 23.73 },
+  },
 ];
 
 // ── Browser configurations ────────────────────────────────────────────────────
@@ -549,7 +559,7 @@ async function errorFlow(page, browserLabel, persona) {
 
 async function runRound(round, browserKey) {
   const config = BROWSER_CONFIGS[browserKey];
-  const [p0, p1, p2, p3] = PERSONAS;
+  const [p0, p1, p2, p3, p4] = PERSONAS;
 
   separator();
   process.stdout.write(`Round ${round} of ${ROUNDS}  [${config.label}]\n`);
@@ -567,7 +577,7 @@ async function runRound(round, browserKey) {
   await withBrowser(browserKey, p0,          (page, label) => completeBooking(page, label, p0));
   await sleep(jitter(1500, 2500));
 
-  await withBrowser(browserKey, p3,          (page, label) => atlantisBooking(page, label, p3));
+  await withBrowser(browserKey, p4,          (page, label) => atlantisBooking(page, label, p4));
   await sleep(jitter(1500, 2500));
 
   await withBrowser(browserKey, p2,          (page, label) => errorFlow(page, label, p2));

@@ -71,6 +71,7 @@ img { max-width: 100%; display: block; }
   color: var(--brand-primary);
   letter-spacing: -0.5px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .nav-logo span { color: var(--brand-accent); }
@@ -103,6 +104,7 @@ img { max-width: 100%; display: block; }
   position: relative;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .nav-user-btn {
@@ -250,6 +252,7 @@ img { max-width: 100%; display: block; }
   font-size: .75rem;
   font-weight: 700;
   white-space: nowrap;
+  flex-shrink: 0;
   border: 1.5px solid var(--vendor-color, var(--border));
   color: var(--vendor-color, var(--text-muted));
   background: var(--vendor-bg, transparent);
@@ -261,6 +264,7 @@ img { max-width: 100%; display: block; }
   height: 18px;
   width: auto;
   display: block;
+  flex-shrink: 0;
 }
 
 /* ── Hero ── */
@@ -674,8 +678,17 @@ img { max-width: 100%; display: block; }
 }
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .nav-inner { gap: 16px; }
+  .nav-links { gap: 0; }
+  .nav-links a { padding: 6px 8px; font-size: .82rem; }
+}
+
+@media (max-width: 960px) {
   .nav-links { display: none; }
+}
+
+@media (max-width: 768px) {
   .search-box { flex-direction: column; }
   .search-field { min-width: 100%; }
   .grid-3, .grid-2 { grid-template-columns: 1fr; }
