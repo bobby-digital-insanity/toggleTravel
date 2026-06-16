@@ -213,6 +213,66 @@
     .t-persona  { color: #818cf8; font-weight: 600; }
     .t-note     { color: #64748b; font-style: italic; }
     .t-done     { color: #4ade80; font-weight: bold; }
+
+    .persona-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .persona-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .persona-info { flex: 1; min-width: 0; }
+
+    .persona-name {
+      font-weight: 700;
+      font-size: .95rem;
+      margin-bottom: 2px;
+    }
+
+    .persona-email {
+      font-size: .75rem;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-family: 'SF Mono', 'Monaco', monospace;
+    }
+
+    .persona-desc {
+      font-size: .82rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .persona-flow { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .flow-chip {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: .72rem;
+      font-weight: 600;
+    }
+    .flow-chip--green  { background: #d1fae5; color: #065f46; }
+    .flow-chip--amber  { background: #fef3c7; color: #92400e; }
+    .flow-chip--blue   { background: #dbeafe; color: #1e40af; }
+    .flow-chip--red    { background: #fee2e2; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -278,6 +338,7 @@
             <div class="legend-item"><span>🛍</span> Window Shopper × 2</div>
             <div class="legend-item"><span>🚪</span> Abandoned Checkout × 1</div>
             <div class="legend-item"><span>✅</span> Complete Booking × 1</div>
+            <div class="legend-item"><span>🔱</span> Atlantis Booking × 1</div>
             <div class="legend-item"><span>⚠️</span> Error Signals × 1</div>
           </div>
         </div>
@@ -299,6 +360,68 @@
         </div>
 
       </div>
+
+      <!-- Personas -->
+      <div style="margin-top:48px">
+        <div class="control-label" style="margin-bottom:20px">Personas</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+
+          <div class="persona-card">
+            <div class="persona-avatar" style="background:#6366f1">A</div>
+            <div class="persona-info">
+              <div class="persona-name">Alex</div>
+              <div class="persona-email">alex@demo.toggletravel.io</div>
+              <div class="persona-desc">Completes a full booking end-to-end — search, destination view, form fill, payment confirm. Generates a successful booking trace and session replay.</div>
+              <div class="persona-flow"><span class="flow-chip flow-chip--green">✅ Complete Booking</span></div>
+            </div>
+          </div>
+
+          <div class="persona-card">
+            <div class="persona-avatar" style="background:#f59e0b">J</div>
+            <div class="persona-info">
+              <div class="persona-name">Jordan</div>
+              <div class="persona-email">jordan@demo.toggletravel.io</div>
+              <div class="persona-desc">Browses two destinations, clicks into the booking form, then walks away without confirming. Generates abandoned-funnel signals in session replay.</div>
+              <div class="persona-flow"><span class="flow-chip flow-chip--amber">🚪 Abandoned Checkout</span></div>
+            </div>
+          </div>
+
+          <div class="persona-card">
+            <div class="persona-avatar" style="background:#10b981">S</div>
+            <div class="persona-info">
+              <div class="persona-name">Sam</div>
+              <div class="persona-email">sam@demo.toggletravel.io</div>
+              <div class="persona-desc">Clicks through destination cards and runs a casual search — no booking intent. Also runs the error flow, firing bad API requests to generate 4xx signals.</div>
+              <div class="persona-flow">
+                <span class="flow-chip flow-chip--blue">🛍 Window Shopper</span>
+                <span class="flow-chip flow-chip--red">⚠️ Error Signals</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="persona-card">
+            <div class="persona-avatar" style="background:#ec4899">T</div>
+            <div class="persona-info">
+              <div class="persona-name">Taylor</div>
+              <div class="persona-email">taylor@demo.toggletravel.io</div>
+              <div class="persona-desc">A second window shopper — browses destinations from a different locale (Tokyo) to generate geographic diversity in RUM sessions and flag evaluations.</div>
+              <div class="persona-flow"><span class="flow-chip flow-chip--blue">🛍 Window Shopper</span></div>
+            </div>
+          </div>
+
+          <div class="persona-card">
+            <div class="persona-avatar" style="background:#405BFF">P</div>
+            <div class="persona-info">
+              <div class="persona-name">Poseidon</div>
+              <div class="persona-email">poseidon@demo.toggletravel.io</div>
+              <div class="persona-desc">Always tries to book Atlantis — a destination that hard-fails with a 404. Every round generates a server error log and a browser-recorded error in LD Observability.</div>
+              <div class="persona-flow"><span class="flow-chip flow-chip--red">🔱 Atlantis Booking</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </section>
 
