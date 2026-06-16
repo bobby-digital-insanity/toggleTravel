@@ -195,10 +195,32 @@
             </div>
           </a>
         `).join('');
+        applyAtlantisCardState(grid);
       } catch (err) {
         status.innerHTML = `<span style="color:var(--error)">✗ Error</span>`;
         grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Search failed: ${err.message}</div>`;
       }
+    }
+
+    function applyAtlantisCardState(grid) {
+      const card = grid.querySelector('a[data-id="dest-013"]');
+      if (!card) return;
+      function update(enabled) {
+        const img = card.querySelector('img');
+        if (img) img.style.opacity = enabled ? '' : '0.35';
+        const existing = card.querySelector('.unavail-badge');
+        if (!enabled && !existing) {
+          const badge = document.createElement('div');
+          badge.className = 'unavail-badge';
+          badge.textContent = 'Unavailable';
+          badge.style.cssText = 'position:absolute;top:12px;right:12px;background:#ef4444;color:#fff;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:999px;pointer-events:none;z-index:2;';
+          card.appendChild(badge);
+        } else if (enabled && existing) {
+          existing.remove();
+        }
+      }
+      update(LDFlags.get('atlantis-booking-enabled'));
+      LDFlags.onChange('atlantis-booking-enabled', update);
     }
   </script>
 </body>
