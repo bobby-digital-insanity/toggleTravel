@@ -89,6 +89,7 @@ img { max-width: 100%; display: block; }
   font-size: .9rem;
   font-weight: 500;
   color: var(--text-muted);
+  white-space: nowrap;
   transition: background var(--transition), color var(--transition);
 }
 
@@ -678,11 +679,6 @@ img { max-width: 100%; display: block; }
 }
 
 /* ── Responsive ── */
-@media (max-width: 1024px) {
-  .nav-inner { gap: 16px; }
-  .nav-links { gap: 0; }
-  .nav-links a { padding: 6px 8px; font-size: .82rem; }
-}
 
 /* ── Hamburger button ── */
 .nav-hamburger {
@@ -753,7 +749,7 @@ img { max-width: 100%; display: block; }
   margin: 8px 24px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1080px) {
   .nav-links { display: none; }
   .nav-hamburger { display: flex; }
 }
