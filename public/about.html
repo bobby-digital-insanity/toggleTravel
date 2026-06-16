@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About — Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .about-hero {
+      background: linear-gradient(135deg, #0057b8 0%, #405BFF 100%);
+      color: #fff;
+      padding: 72px 24px 64px;
+      text-align: center;
+    }
+    .about-hero .eyebrow {
+      display: inline-block;
+      background: rgba(255,255,255,.15);
+      color: #fff;
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: .8rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .about-hero h1 { font-size: 2.6rem; font-weight: 800; margin-bottom: 16px; line-height: 1.2; }
+    .about-hero p { font-size: 1.1rem; opacity: .85; max-width: 640px; margin: 0 auto; line-height: 1.7; }
+
+    .use-case-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 24px;
+      margin-top: 48px;
+    }
+
+    .use-case-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: box-shadow var(--transition), transform var(--transition), border-color var(--transition);
+    }
+    .use-case-card:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-3px);
+      border-color: #405BFF;
+      text-decoration: none;
+    }
+    .use-case-card .card-icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+    .use-case-card .card-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: #405BFF;
+    }
+    .use-case-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 0;
+    }
+    .use-case-card p {
+      font-size: .9rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+      margin: 0;
+      flex: 1;
+    }
+    .use-case-card .card-cta {
+      font-size: .85rem;
+      font-weight: 600;
+      color: #405BFF;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .coming-soon {
+      opacity: .55;
+      pointer-events: none;
+      cursor: default;
+    }
+    .badge-soon {
+      display: inline-block;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 2px 10px;
+    }
+
+    .ld-stack-section {
+      background: var(--surface-2);
+      border-top: 1px solid var(--border);
+    }
+    .stack-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .stack-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/ai-planner">AI Planner</a></li>
+        <li><a href="/about.html">About</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="about-hero">
+    <div class="eyebrow">Demo Platform</div>
+    <h1>Built to show what<br>LaunchDarkly can see</h1>
+    <p>Toggle Travel is a fully instrumented travel booking app — every search, booking, error, and AI interaction is observable through LaunchDarkly. Use the pages below to explore each use case.</p>
+  </section>
+
+  <!-- USE CASES -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Use Cases</div>
+        <h2>What you can demo</h2>
+        <p>Each topic maps to a real capability in the LaunchDarkly Observability platform.</p>
+      </div>
+
+      <div class="use-case-grid">
+
+        <a href="/about/errors.html" class="use-case-card">
+          <div class="card-icon">🚨</div>
+          <div class="card-tag">Errors</div>
+          <h3>Booking Errors &amp; the Atlantis Problem</h3>
+          <p>See how a hard-coded 404 on the Atlantis destination surfaces in real time on the LD Observability Errors page — with full browser and server context.</p>
+          <div class="card-cta">Explore use case →</div>
+        </a>
+
+        <div class="use-case-card coming-soon">
+          <div class="card-icon">🔀</div>
+          <div class="card-tag">Feature Flags <span class="badge-soon">Coming soon</span></div>
+          <h3>Feature Flag Evaluations</h3>
+          <p>How LaunchDarkly tracks every flag evaluation in the browser and on the server, and ties them to sessions, traces, and user context.</p>
+        </div>
+
+        <div class="use-case-card coming-soon">
+          <div class="card-icon">📹</div>
+          <div class="card-tag">Session Replay <span class="badge-soon">Coming soon</span></div>
+          <h3>Session Replay</h3>
+          <p>Watch real user sessions — every click, scroll, and rage-click recorded and linked back to the traces and flag evaluations active at the time.</p>
+        </div>
+
+        <div class="use-case-card coming-soon">
+          <div class="card-icon">🔭</div>
+          <div class="card-tag">Traces <span class="badge-soon">Coming soon</span></div>
+          <h3>Distributed Traces</h3>
+          <p>Full request traces from browser click through Express route to external service calls — with the LD context that was active for that request.</p>
+        </div>
+
+        <div class="use-case-card coming-soon">
+          <div class="card-icon">📋</div>
+          <div class="card-tag">Logs <span class="badge-soon">Coming soon</span></div>
+          <h3>Logs</h3>
+          <p>Structured Winston logs forwarded to LD Observability via a custom transport, correlated to traces and sessions automatically.</p>
+        </div>
+
+        <div class="use-case-card coming-soon">
+          <div class="card-icon">📈</div>
+          <div class="card-tag">Metrics &amp; Alerts <span class="badge-soon">Coming soon</span></div>
+          <h3>Metrics &amp; Alerts</h3>
+          <p>Custom booking revenue and failure metrics tracked as LD events, with threshold and anomaly alerts routing to Slack when something goes wrong.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- STACK OVERVIEW -->
+  <section class="section ld-stack-section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">How it's wired</div>
+        <h2>The observability stack</h2>
+        <p>Every signal in this app flows through the LaunchDarkly Observability SDK — browser and server.</p>
+      </div>
+      <div class="stack-pills">
+        <div class="stack-pill">⚙️ Node.js + Express backend</div>
+        <div class="stack-pill">🌐 Vanilla JS frontend</div>
+        <div class="stack-pill">🔵 LD Observability Node SDK</div>
+        <div class="stack-pill">🔵 LD Observability Browser SDK</div>
+        <div class="stack-pill">📹 LD Session Replay SDK</div>
+        <div class="stack-pill">🏴 LD Feature Flag JS SDK</div>
+        <div class="stack-pill">📝 Winston → LDTransport</div>
+        <div class="stack-pill">🤖 Anthropic Claude (AI Planner)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="/search.html">Destinations</a></li>
+          <li><a href="/bookings.html">My Trips</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>About</h4>
+        <ul>
+          <li><a href="/about.html">Overview</a></li>
+          <li><a href="/about/errors.html">Errors</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel. Built for demos.</span>
+      <span>Powered by LaunchDarkly</span>
+    </div>
+  </footer>
+
+  <script src="/js/ldobservability.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/ldsessionreplay.min.js"></script>
+  <script src="/js/flags.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Errors — About Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .page-hero {
+      background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%);
+      color: #fff;
+      padding: 64px 24px 56px;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      font-weight: 500;
+      opacity: .7;
+      margin-bottom: 24px;
+    }
+    .breadcrumb a { color: #fff; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb-sep { opacity: .5; }
+    .page-hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 14px; line-height: 1.2; }
+    .page-hero p { font-size: 1.05rem; opacity: .85; max-width: 600px; line-height: 1.7; }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .content-section { padding: 56px 0; }
+    .content-section + .content-section { border-top: 1px solid var(--border); padding-top: 56px; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+    .prose h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 16px; }
+    .prose h3 { font-size: 1.1rem; font-weight: 700; margin: 28px 0 10px; }
+    .prose p { color: var(--text-muted); line-height: 1.75; margin-bottom: 14px; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose strong { color: var(--text); }
+
+    .callout {
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 24px 0;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.3rem; flex-shrink: 0; line-height: 1.4; }
+    .callout-body { flex: 1; }
+    .callout-body strong { display: block; margin-bottom: 4px; font-size: .95rem; }
+    .callout-body p { font-size: .88rem; line-height: 1.65; margin: 0; }
+    .callout--error { background: #fef2f2; border: 1px solid #fecaca; }
+    .callout--error .callout-body strong { color: #991b1b; }
+    .callout--error .callout-body p { color: #7f1d1d; }
+    .callout--ld { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .callout--ld .callout-body strong { color: #1e40af; }
+    .callout--ld .callout-body p { color: #1e3a8a; }
+    .callout--code { background: var(--surface-2); border: 1px solid var(--border); }
+    .callout--code .callout-body strong { color: var(--text); }
+    .callout--code .callout-body p { color: var(--text-muted); }
+
+    .flow-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      position: relative;
+    }
+    .flow-step + .flow-step { margin-top: 20px; }
+    .flow-step + .flow-step::before {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: -20px;
+      width: 2px;
+      height: 20px;
+      background: var(--border);
+    }
+    .flow-num {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .flow-num--red { background: #fee2e2; color: #b91c1c; }
+    .flow-num--blue { background: #dbeafe; color: #1d4ed8; }
+    .flow-num--purple { background: #ede9fe; color: #6d28d9; }
+    .flow-num--green { background: #d1fae5; color: #065f46; }
+    .flow-text strong { display: block; font-size: .9rem; font-weight: 700; margin-bottom: 3px; }
+    .flow-text span { font-size: .82rem; color: var(--text-muted); line-height: 1.5; }
+
+    .ui-screenshot-placeholder {
+      background: linear-gradient(135deg, #1e1b4b 0%, #2d2470 100%);
+      border-radius: var(--radius);
+      padding: 32px;
+      color: #fff;
+      font-size: .85rem;
+      line-height: 1.6;
+    }
+    .ui-screenshot-placeholder .mock-header {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      opacity: .6;
+      margin-bottom: 16px;
+    }
+    .mock-error-row {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .mock-error-row .err-title { font-weight: 600; font-size: .88rem; }
+    .mock-error-row .err-meta { font-size: .75rem; opacity: .6; }
+    .mock-badge {
+      display: inline-block;
+      background: #ef4444;
+      color: #fff;
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      font-size: .8rem;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      line-height: 1.65;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    .code-comment { color: #64748b; }
+    .code-key { color: #7dd3fc; }
+    .code-str { color: #86efac; }
+    .code-fn { color: #fbbf24; }
+
+    .try-it-banner {
+      background: linear-gradient(135deg, #405BFF 0%, #6366f1 100%);
+      border-radius: var(--radius);
+      padding: 32px 36px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .try-it-banner h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+    .try-it-banner p { opacity: .85; font-size: .9rem; margin: 0; }
+    .try-it-banner .btn-white {
+      background: #fff;
+      color: #405BFF;
+      font-weight: 700;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: .9rem;
+      white-space: nowrap;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .try-it-banner .btn-white:hover { opacity: .9; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/ai-planner">AI Planner</a></li>
+        <li><a href="/about.html">About</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb">
+        <a href="/about.html">About</a>
+        <span class="breadcrumb-sep">/</span>
+        <span>Errors</span>
+      </div>
+      <h1>🚨 Booking Errors &amp;<br>the Atlantis Problem</h1>
+      <p>How a hard-coded 404 destination becomes a real-time error in the LaunchDarkly Observability platform — captured from both the browser and the server.</p>
+      <div class="tag-row">
+        <span class="tag">🔵 LD Observability Browser SDK</span>
+        <span class="tag">🔵 LD Observability Node SDK</span>
+        <span class="tag">📝 Winston LDTransport</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE PROBLEM -->
+  <section class="content-section">
+    <div class="container">
+      <div class="two-col">
+        <div class="prose">
+          <h2>The problem</h2>
+          <p>Atlantis is a destination in Toggle Travel that <strong>always fails at checkout</strong>. When a user selects Atlantis and clicks Confirm, the server returns a <strong>404 — Destination Not Found</strong>. No booking is created. The payment is never charged. The user hits a dead end.</p>
+          <p>This isn't a bug we need to fix — it's a deliberate demo signal. The question is: <strong>how quickly can your observability platform surface it?</strong></p>
+
+          <div class="callout callout--error">
+            <div class="callout-icon">⚠️</div>
+            <div class="callout-body">
+              <strong>What the user sees</strong>
+              <p>A dark-red "404 — Destination Not Found" banner with the server's error message, the trace ID, and a "Browse other destinations" button.</p>
+            </div>
+          </div>
+
+          <div class="callout callout--code">
+            <div class="callout-icon">⚙️</div>
+            <div class="callout-body">
+              <strong>What the server does</strong>
+              <p>bookingService.js throws a 404 immediately after the destination lookup — before any payment or database write. Winston logs the error, which routes to LD via the custom LDTransport.</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="ui-screenshot-placeholder">
+            <div class="mock-header">LD Observability — Errors</div>
+            <div class="mock-error-row">
+              <div>
+                <div class="err-title">booking_failed_destination_unreachable</div>
+                <div class="err-meta">dest-013 · Atlantis · $8,000 quoted</div>
+              </div>
+              <span class="mock-badge">404</span>
+            </div>
+            <div class="mock-error-row">
+              <div>
+                <div class="err-title">Booking error: 404 — Destination not found</div>
+                <div class="err-meta">booking.html · confirmBooking() · browser</div>
+              </div>
+              <span class="mock-badge">Browser</span>
+            </div>
+            <div class="mock-error-row" style="opacity:.4">
+              <div>
+                <div class="err-title">Payment declined</div>
+                <div class="err-meta">booking.html · confirmBooking() · browser</div>
+              </div>
+              <span class="mock-badge" style="background:#f59e0b">402</span>
+            </div>
+          </div>
+          <p style="font-size:.75rem;color:var(--text-light);text-align:center;margin-top:10px">How errors appear in the LD Observability Errors view</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW LD CAPTURES IT -->
+  <section class="content-section" style="background:var(--surface-2)">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">How it works</div>
+        <h2>Two signals, one error</h2>
+        <p>LaunchDarkly captures the Atlantis failure from both sides — server and browser — and correlates them with the same trace ID.</p>
+      </div>
+
+      <div class="two-col" style="margin-top:40px">
+
+        <div>
+          <h3 style="font-weight:700;margin-bottom:20px">Signal flow</h3>
+          <div class="flow-diagram">
+            <div class="flow-step">
+              <div class="flow-num flow-num--red">1</div>
+              <div class="flow-text">
+                <strong>User clicks Confirm on Atlantis</strong>
+                <span>Browser sends POST /api/bookings with destinationId=dest-013</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--red">2</div>
+              <div class="flow-text">
+                <strong>Server throws 404</strong>
+                <span>bookingService.js detects dest-013 and throws before any payment or DB write</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--blue">3</div>
+              <div class="flow-text">
+                <strong>Winston logs the error</strong>
+                <span>logger.error('booking_failed_destination_unreachable', { destination_id, quoted_amount, session_id, … })</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--blue">4</div>
+              <div class="flow-text">
+                <strong>LDTransport forwards to LD</strong>
+                <span>The custom Winston transport calls LDObserve.recordLog() — the log appears on the LD Observability Logs and Errors views</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--purple">5</div>
+              <div class="flow-text">
+                <strong>Browser catches the 404 response</strong>
+                <span>confirmBooking() in booking.html catches the error from the fetch call</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--purple">6</div>
+              <div class="flow-text">
+                <strong>Browser SDK records the error</strong>
+                <span>LDObserve.recordError(err, undefined, { destination_id, http_status, trace_id, … }) sends the browser-side event to LD with rich metadata</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--green">7</div>
+              <div class="flow-text">
+                <strong>Both entries appear in LD Observability</strong>
+                <span>Server log + browser error are correlated by trace_id — one click surfaces the full picture</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h3>Why explicit recordError?</h3>
+          <p>The LD Observability browser SDK automatically captures <strong>uncaught</strong> errors (unhandled promise rejections, window.onerror). But the Atlantis 404 is <em>caught</em> — the UI handles it to show the user a helpful banner.</p>
+          <p>If we didn't call <code>LDObserve.recordError()</code> manually, the SDK's auto-capture wouldn't fire and the error would be invisible to LD. Explicit recording is required any time you catch-and-display.</p>
+
+          <div class="callout callout--ld">
+            <div class="callout-icon">🔵</div>
+            <div class="callout-body">
+              <strong>LD records errors for every booking failure</strong>
+              <p>Not just Atlantis 404s — payment declines (402) and generic 5xx errors are also passed to recordError(). This means the LD Errors view reflects the full health of the booking flow, not just one failure mode.</p>
+            </div>
+          </div>
+
+          <h3>The metadata attached to each error</h3>
+          <div class="code-block">
+<span class="code-fn">LDObserve</span>.<span class="code-fn">recordError</span>(err, undefined, {<br>
+&nbsp;&nbsp;<span class="code-key">destination_id</span>:   <span class="code-str">'dest-013'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">destination_name</span>: <span class="code-str">'Atlantis'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">quoted_amount</span>:    <span class="code-str">8000</span>,<br>
+&nbsp;&nbsp;<span class="code-key">http_status</span>:      <span class="code-str">404</span>,<br>
+&nbsp;&nbsp;<span class="code-key">trace_id</span>:         <span class="code-comment">/* from response header */</span>,<br>
+&nbsp;&nbsp;<span class="code-key">page</span>:             <span class="code-str">'booking'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">stage</span>:            <span class="code-str">'confirm'</span>,<br>
+});
+          </div>
+          <p>This metadata is searchable and filterable on the LD Observability Errors view — you can filter to <code>destination_id=dest-013</code> to see only Atlantis failures, or <code>http_status=404</code> to see all not-found errors across the app.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- TRY IT -->
+  <section class="content-section">
+    <div class="container">
+      <div class="try-it-banner">
+        <div>
+          <h3>Try it yourself</h3>
+          <p>Search for Atlantis in the Oceania region, open the destination, and click Book. Hit Confirm on the payment step — then check the LD Observability Errors view.</p>
+        </div>
+        <a href="/search.html?region=oceania" class="btn-white">Search Oceania →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="/search.html">Destinations</a></li>
+          <li><a href="/bookings.html">My Trips</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>About</h4>
+        <ul>
+          <li><a href="/about.html">Overview</a></li>
+          <li><a href="/about/errors.html">Errors</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel. Built for demos.</span>
+      <span>Powered by LaunchDarkly</span>
+    </div>
+  </footer>
+
+  <script src="/js/ldobservability.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/ldsessionreplay.min.js"></script>
+  <script src="/js/flags.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+</body>
+</html>

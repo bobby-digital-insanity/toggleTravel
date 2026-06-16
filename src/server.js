@@ -61,6 +61,14 @@ app.get('/ai-planner', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'ai-planner.html'));
 });
 
+// About pages (extensionless routes)
+app.get('/about', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'about.html'));
+});
+app.get('/about/errors', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'about', 'errors.html'));
+});
+
 // SPA fallback for client-side routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
