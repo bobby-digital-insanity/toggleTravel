@@ -5,6 +5,7 @@ const logger = require('../logger');
 const db = require('../db');
 const { authorizePayment } = require('./externalMockService');
 const destinationService = require('./destinationService');
+const ld = require('../launchdarkly');
 
 function rowToBooking(row) {
   if (!row) return null;
@@ -36,17 +37,20 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
   const dest = await destinationService.getById(destinationId);
   const totalAmount = dest.basePrice * travelers;
 
-  // Atlantis is unreachable — surface a 404 to demo LD Observability's Errors view
+  // Atlantis is unreachable unless the flag is on — demos LD Observability Errors + kill switch
   if (destinationId === 'dest-013') {
-    logger.error('booking_failed_destination_unreachable', {
-      ...logCtx,
-      destination_name: dest.name,
-      contact_email: contactEmail,
-      quoted_amount: totalAmount,
-    });
-    const err = new Error(`Destination unreachable: ${dest.name} is not currently bookable`);
-    err.status = 404;
-    throw err;
+    const atlantisEnabled = await ld.getFlag('atlantis-booking-enabled', false, sessionId);
+    if (!atlantisEnabled) {
+      logger.error('booking_failed_destination_unreachable', {
+        ...logCtx,
+        destination_name: dest.name,
+        contact_email: contactEmail,
+        quoted_amount: totalAmount,
+      });
+      const err = new Error(`Destination unreachable: ${dest.name} is not currently bookable`);
+      err.status = 404;
+      throw err;
+    }
   }
 
   // Stage 2: payment authorization

@@ -11,11 +11,12 @@ window.LDFlags = (function () {
   const ready = new Promise((r) => { readyResolve = r; });
 
   const DEFAULTS = {
-    'show-demo-panel':        true,
-    'featured-destinations':  [],
-    'booking-flow-variant':   'standard',
-    'promo-banner-text':      '',
-    'ai-planner-enabled':     true,
+    'show-demo-panel':            true,
+    'featured-destinations':      [],
+    'booking-flow-variant':       'standard',
+    'promo-banner-text':          '',
+    'ai-planner-enabled':         true,
+    'atlantis-booking-enabled':   false,
   };
 
   // Set by Playwright load script (scripts/playwright-load.js) per browser session
