@@ -199,7 +199,7 @@
     "description": "Step beyond myth and into the deep. Atlantis is a once-in-a-lifetime descent to a sunken civilization preserved in the crystalline depths of the mid-Atlantic. Tour coral-encrusted temples, swim among schools of bioluminescent fish through marble colonnades, and dine in a pressurized glass dome surrounded by the open ocean. This is travel where the laws of the surface no longer apply.",
     "basePrice": 8000,
     "currency": "USD",
-    "heroImage": "https://picsum.photos/seed/atlantis/1200/800",
+    "heroImage": "/images/atlantis.jpg",
     "activities": ["Deep dives", "Sunken temple tours", "Bioluminescent night swims", "Submersible expeditions", "Underwater dining"],
     "bestSeason": "summer",
     "weatherSummary": "Year-round 4°C at depth — pressurized habitats kept at 22°C",
