@@ -16,7 +16,6 @@ window.LDFlags = (function () {
     'booking-flow-variant':       'standard',
     'promo-banner-text':          '',
     'ai-planner-enabled':         true,
-    'atlantis-booking-enabled':   false,
   };
 
   // Set by Playwright load script (scripts/playwright-load.js) per browser session

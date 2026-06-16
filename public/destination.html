@@ -203,7 +203,6 @@
         document.getElementById('dest-loading').style.display = 'none';
         document.getElementById('dest-content').style.display = '';
         updateTotalPrice();
-        if (id === 'dest-013') applyAtlantisFlag();
       } catch (err) {
         document.getElementById('dest-loading').innerHTML =
           `<div class="alert alert-error">${err.status === 404 ? 'Destination not found.' : `Error: ${err.message}`}</div>`;
@@ -261,29 +260,6 @@
       location.href = `/booking.html?${params}`;
     }
 
-    async function applyAtlantisFlag() {
-      await LDFlags.init();
-      const enabled = LDFlags.get('atlantis-booking-enabled');
-      const btn = document.getElementById('book-btn');
-      if (!enabled) {
-        btn.disabled = true;
-        btn.textContent = '⚠ Currently Unavailable';
-        btn.style.cssText += ';opacity:.5;cursor:not-allowed;';
-        const note = document.querySelector('#book-btn + p');
-        if (note) note.textContent = 'This destination is temporarily unavailable for booking.';
-      }
-      // Re-apply whenever the flag changes (live kill-switch demo)
-      LDFlags.onChange('atlantis-booking-enabled', (val) => {
-        btn.disabled = !val;
-        btn.textContent = val ? 'Book This Trip →' : '⚠ Currently Unavailable';
-        btn.style.opacity = val ? '1' : '.5';
-        btn.style.cursor = val ? 'pointer' : 'not-allowed';
-        const note = document.querySelector('#book-btn + p');
-        if (note) note.textContent = val
-          ? 'Free cancellation • No hidden fees'
-          : 'This destination is temporarily unavailable for booking.';
-      });
-    }
   </script>
 </body>
 </html>

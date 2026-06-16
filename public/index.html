@@ -164,34 +164,11 @@
             </div>
           </a>
         `).join('');
-        applyAtlantisCardState(grid);
       } catch (err) {
         document.getElementById('destinations-grid').innerHTML =
           `<div class="alert alert-error" style="grid-column:1/-1">Failed to load destinations: ${err.message}</div>`;
       }
     });
-
-    function applyAtlantisCardState(grid) {
-      const card = grid.querySelector('a[data-id="dest-013"]');
-      if (!card) return;
-      const on = LDFlags.get('atlantis-booking-enabled');
-      if (!on) {
-        card.style.opacity = '0.55';
-        card.style.filter = 'grayscale(40%)';
-        if (!card.querySelector('.unavail-badge')) {
-          const badge = document.createElement('div');
-          badge.className = 'unavail-badge';
-          badge.textContent = 'Unavailable';
-          badge.style.cssText = 'position:absolute;top:12px;right:12px;background:#ef4444;color:#fff;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:999px;z-index:2;pointer-events:none;';
-          card.appendChild(badge);
-        }
-      } else {
-        card.style.opacity = '';
-        card.style.filter = '';
-        card.querySelector('.unavail-badge')?.remove();
-      }
-      LDFlags.onChange('atlantis-booking-enabled', () => applyAtlantisCardState(grid));
-    }
 
     function doHeroSearch() {
       const q = document.getElementById('hero-search').value;
