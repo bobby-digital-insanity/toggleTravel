@@ -160,15 +160,19 @@
 
         const elapsed = Date.now() - startTime;
         status.innerHTML = `<span style="color:var(--success)">✓</span> ${elapsed}ms`;
-        header.textContent = `${data.count} destination${data.count !== 1 ? 's' : ''} found`;
 
-        if (data.results.length === 0) {
+        const atlantisOn = LDFlags.get('atlantis-booking-enabled');
+        const results = atlantisOn ? data.results : data.results.filter((d) => d.id !== 'dest-013');
+
+        header.textContent = `${results.length} destination${results.length !== 1 ? 's' : ''} found`;
+
+        if (results.length === 0) {
           grid.innerHTML = '';
           noResults.style.display = '';
           return;
         }
 
-        grid.innerHTML = data.results.map((d) => `
+        grid.innerHTML = results.map((d) => `
           <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">
             <img src="${d.heroImage}" alt="${d.name}" class="card-img" loading="lazy"
               onerror="this.src='https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&q=70'">

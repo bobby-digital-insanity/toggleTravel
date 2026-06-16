@@ -145,9 +145,11 @@
       try {
         const data = await api.get('/api/destinations');
         const flaggedIds = LDFlags.get('featured-destinations');
+        const atlantisOn = LDFlags.get('atlantis-booking-enabled');
+        const visible = atlantisOn ? data.destinations : data.destinations.filter((d) => d.id !== 'dest-013');
         const featured = (Array.isArray(flaggedIds) && flaggedIds.length > 0)
-          ? data.destinations.filter((d) => flaggedIds.includes(d.id)).slice(0, 6)
-          : data.destinations.slice(0, 6);
+          ? visible.filter((d) => flaggedIds.includes(d.id)).slice(0, 6)
+          : visible.slice(0, 6);
         const grid = document.getElementById('destinations-grid');
         grid.innerHTML = featured.map((d) => `
           <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">
