@@ -143,6 +143,80 @@ function onEscCloseMenu(e) {
   if (e.key === 'Escape') closeUserMenu();
 }
 
+function injectHamburger() {
+  const navInner = document.querySelector('.nav-inner');
+  const navLinks = document.querySelector('.nav-links');
+  if (!navInner || !navLinks || document.getElementById('nav-hamburger')) return;
+
+  // Build hamburger button
+  const btn = document.createElement('button');
+  btn.id = 'nav-hamburger';
+  btn.className = 'nav-hamburger';
+  btn.setAttribute('aria-label', 'Open menu');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.innerHTML = '<span></span><span></span><span></span>';
+  navInner.appendChild(btn);
+
+  // Build mobile overlay + drawer with the same links as the desktop nav
+  const overlay = document.createElement('div');
+  overlay.id = 'nav-mobile-menu';
+  overlay.className = 'nav-mobile-menu';
+
+  const drawer = document.createElement('nav');
+  drawer.className = 'nav-mobile-drawer';
+
+  const links = [
+    { href: '/',             label: 'Home' },
+    { href: '/search.html',  label: 'Destinations' },
+    { href: '/bookings.html',label: 'My Trips' },
+    { href: '/ai-planner',   label: 'AI Planner' },
+    { href: '/about.html',   label: 'About' },
+  ];
+
+  links.forEach((link) => {
+    const a = document.createElement('a');
+    a.href = link.href;
+    a.textContent = link.label;
+    if (location.pathname === new URL(link.href, location.origin).pathname ||
+        (link.href !== '/' && location.pathname.startsWith(new URL(link.href, location.origin).pathname))) {
+      a.classList.add('active');
+    }
+    drawer.appendChild(a);
+  });
+
+  overlay.appendChild(drawer);
+  document.body.appendChild(overlay);
+
+  function openMenu() {
+    btn.classList.add('is-open');
+    overlay.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('keydown', onEscClose);
+  }
+
+  function closeMenu() {
+    btn.classList.remove('is-open');
+    overlay.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', onEscClose);
+  }
+
+  function onEscClose(e) { if (e.key === 'Escape') closeMenu(); }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btn.classList.contains('is-open') ? closeMenu() : openMenu();
+  });
+
+  // Tap on the dark backdrop (outside drawer) closes the menu
+  overlay.addEventListener('click', (e) => {
+    if (!drawer.contains(e.target)) closeMenu();
+  });
+
+  // Navigating to a link closes the menu
+  drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeMenu));
+}
+
 function injectUserSelect() {
   const navInner = document.querySelector('.nav-inner');
   if (!navInner) return;
@@ -169,6 +243,7 @@ function injectUserSelect() {
 }());
 
 injectUserSelect();
+injectHamburger();
 
 // Active nav link — pure location/DOM, no LD dependency
 (function highlightActiveLink() {
