@@ -203,6 +203,7 @@
         document.getElementById('dest-loading').style.display = 'none';
         document.getElementById('dest-content').style.display = '';
         updateTotalPrice();
+        if (id === 'dest-013') applyAtlantisBookingFlag();
       } catch (err) {
         document.getElementById('dest-loading').innerHTML =
           `<div class="alert alert-error">${err.status === 404 ? 'Destination not found.' : `Error: ${err.message}`}</div>`;
@@ -260,6 +261,24 @@
       location.href = `/booking.html?${params}`;
     }
 
+    async function applyAtlantisBookingFlag() {
+      await LDFlags.init();
+      const btn = document.getElementById('book-btn');
+      const note = document.querySelector('#book-btn + p');
+
+      function update(enabled) {
+        btn.disabled = !enabled;
+        btn.textContent = enabled ? 'Book This Trip →' : 'Currently Unavailable';
+        btn.style.opacity = enabled ? '' : '0.5';
+        btn.style.cursor = enabled ? '' : 'not-allowed';
+        if (note) note.textContent = enabled
+          ? 'Free cancellation • No hidden fees'
+          : 'This destination is temporarily unavailable.';
+      }
+
+      update(LDFlags.get('atlantis-booking-enabled'));
+      LDFlags.onChange('atlantis-booking-enabled', update);
+    }
   </script>
 </body>
 </html>
