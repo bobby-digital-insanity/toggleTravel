@@ -71,24 +71,35 @@ function migrate() {
 }
 
 function seedDestinations() {
-  // Idempotent: INSERT OR IGNORE picks up new destinations added to the JSON
-  // without overwriting existing rows. Run on every boot.
+  // JSON is the source of truth: upsert every row on boot so edits to the JSON
+  // (new destinations, image swaps, price changes) propagate without breaking
+  // the bookings.destination_id foreign key (INSERT OR REPLACE would delete+reinsert
+  // and trip the FK).
   const seed = require('./data/destinations.json');
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO destinations (id, name, region, tagline, description, base_price, currency,
+  const upsert = db.prepare(`
+    INSERT INTO destinations (id, name, region, tagline, description, base_price, currency,
       hero_image, activities, best_season, weather_summary, rating, duration, highlights)
     VALUES (@id, @name, @region, @tagline, @description, @base_price, @currency,
       @hero_image, @activities, @best_season, @weather_summary, @rating, @duration, @highlights)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      region = excluded.region,
+      tagline = excluded.tagline,
+      description = excluded.description,
+      base_price = excluded.base_price,
+      currency = excluded.currency,
+      hero_image = excluded.hero_image,
+      activities = excluded.activities,
+      best_season = excluded.best_season,
+      weather_summary = excluded.weather_summary,
+      rating = excluded.rating,
+      duration = excluded.duration,
+      highlights = excluded.highlights
   `);
   const tx = db.transaction((rows) => {
-    let inserted = 0;
-    for (const r of rows) {
-      const result = insert.run(r);
-      if (result.changes > 0) inserted += 1;
-    }
-    return inserted;
+    for (const r of rows) upsert.run(r);
   });
-  const inserted = tx(seed.map((d) => ({
+  tx(seed.map((d) => ({
     id: d.id,
     name: d.name,
     region: d.region,
@@ -105,7 +116,7 @@ function seedDestinations() {
     highlights: JSON.stringify(d.highlights || []),
   })));
 
-  if (inserted > 0) logger.info('db_seeded', { table: 'destinations', rows_inserted: inserted });
+  logger.info('db_seeded', { table: 'destinations', rows: seed.length });
 }
 
 function operationOf(sql) {

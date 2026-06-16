@@ -261,12 +261,29 @@
     let destData = null;
     let currentStep = 1;
 
+    // Auto-fill contact email from the active tier user (silver@toggletravel.io etc.)
+    // Only writes when the field is empty or still holds the prior auto-filled value —
+    // never overwrites something the user typed themselves.
+    let autoFilledEmail = null;
+    function applyTierEmail() {
+      const input = document.getElementById('f-email');
+      if (!input) return;
+      const tierEmail = localStorage.getItem('tt-user-email') || '';
+      if (input.value === '' || input.value === autoFilledEmail) {
+        input.value = tierEmail;
+        autoFilledEmail = tierEmail || null;
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       if (!destinationId) { location.href = '/search.html'; return; }
 
       // Pre-fill travelers/dates from URL
       if (params.get('travelers')) document.getElementById('f-travelers').value = params.get('travelers');
       if (params.get('departure')) document.getElementById('f-departure').value = params.get('departure');
+
+      applyTierEmail();
+      window.addEventListener('tt:user-changed', applyTierEmail);
 
       // Default dates
       const dep = new Date(); dep.setDate(dep.getDate() + 30);
