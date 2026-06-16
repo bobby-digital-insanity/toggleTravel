@@ -219,8 +219,12 @@
           existing.remove();
         }
       }
+      // Apply default immediately, then re-apply with real flag value once LD is ready
       update(LDFlags.get('atlantis-booking-enabled'));
-      LDFlags.onChange('atlantis-booking-enabled', update);
+      LDFlags.ready.then(() => {
+        update(LDFlags.get('atlantis-booking-enabled'));
+        LDFlags.onChange('atlantis-booking-enabled', update);
+      });
     }
   </script>
 </body>
