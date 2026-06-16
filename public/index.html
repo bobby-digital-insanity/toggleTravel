@@ -191,7 +191,10 @@
       }
 
       update(LDFlags.get('atlantis-booking-enabled'));
-      LDFlags.onChange('atlantis-booking-enabled', update);
+      LDFlags.ready.then(() => {
+        update(LDFlags.get('atlantis-booking-enabled'));
+        LDFlags.onChange('atlantis-booking-enabled', update);
+      });
     }
 
     function doHeroSearch() {
