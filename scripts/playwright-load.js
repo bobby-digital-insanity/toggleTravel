@@ -10,6 +10,7 @@
  *   windowShopper      — browse destinations, casual search, no booking
  *   abandonedCheckout  — search, view destinations, reach checkout, walk away
  *   completeBooking    — full happy path: search → view → book → confirm
+ *   atlantisBooking    — books dest-013 (Atlantis), always hits 404 for LD Errors demo
  *   errorFlow          — intentional bad requests to generate 4xx/error signals
  *
  * Usage:
@@ -432,6 +433,87 @@ async function completeBooking(page, browserLabel, persona) {
 }
 
 /**
+ * Atlantis booking: navigates directly to dest-013, fills the booking form, and
+ * confirms — expecting a 404 error banner to exercise the LD Observability Errors view.
+ */
+async function atlantisBooking(page, browserLabel, persona) {
+  section(`[${persona.name} / ${browserLabel}] Atlantis Booking (404 demo)`);
+
+  let t = Date.now();
+  await page.goto('/destination.html?id=dest-013');
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  ok(`Loaded Atlantis destination page (${Date.now() - t}ms)`);
+  await sleep(jitter(800, 1400));
+
+  const bookBtn = page.locator('#book-btn');
+  if (!(await bookBtn.waitFor({ state: 'visible', timeout: 6000 }).then(() => true).catch(() => false))) {
+    warn('Atlantis #book-btn not visible — skipping');
+    return;
+  }
+
+  t = Date.now();
+  await Promise.all([
+    page.waitForURL('**/booking.html**', { timeout: 8000 }),
+    bookBtn.click(),
+  ]).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+  ok(`Opened booking form (${Date.now() - t}ms)`);
+  await sleep(jitter(500, 900));
+
+  // Step 1: travelers → Continue
+  const travelersSelect = page.locator('#f-travelers');
+  if (await travelersSelect.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await travelersSelect.selectOption(String(jitter(1, 2)));
+    await sleep(jitter(200, 400));
+  }
+
+  const continueBtn = page.getByRole('button', { name: /Continue/i });
+  if (!(await continueBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    warn('Step 1 Continue button not found — skipping');
+    return;
+  }
+  await continueBtn.click();
+  await sleep(jitter(400, 700));
+
+  // Step 2: email → Review Booking
+  const emailInput = page.locator('#f-email');
+  await emailInput.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+  if (await emailInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+    const currentVal = await emailInput.inputValue().catch(() => '');
+    if (!currentVal) await emailInput.fill(persona.email);
+    await sleep(jitter(300, 500));
+  }
+
+  const reviewBtn = page.getByRole('button', { name: /Review Booking/i });
+  if (!(await reviewBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    warn('Step 2 Review button not found — skipping');
+    return;
+  }
+  await reviewBtn.click();
+  await sleep(jitter(400, 700));
+
+  // Step 3: confirm — expect 404 error banner
+  const confirmBtn = page.locator('#confirm-btn');
+  await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+  if (!(await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
+    warn('Confirm button not found');
+    return;
+  }
+
+  t = Date.now();
+  await confirmBtn.click();
+
+  const errorBanner = await page.locator('#booking-error-banner, .booking-error-banner, [class*="error-banner"]').waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+  const genericError = await page.locator('#booking-error').isVisible({ timeout: 500 }).catch(() => false);
+
+  if (errorBanner || genericError) {
+    ok(`Atlantis 404 error surfaced correctly (${Date.now() - t}ms)`);
+  } else {
+    warn(`Expected 404 banner but got unexpected outcome (${Date.now() - t}ms)`);
+  }
+}
+
+/**
  * Error flow: direct API calls with bad inputs to generate 4xx error signals.
  */
 async function errorFlow(page, browserLabel, persona) {
@@ -485,6 +567,9 @@ async function runRound(round, browserKey) {
   await withBrowser(browserKey, p0,          (page, label) => completeBooking(page, label, p0));
   await sleep(jitter(1500, 2500));
 
+  await withBrowser(browserKey, p3,          (page, label) => atlantisBooking(page, label, p3));
+  await sleep(jitter(1500, 2500));
+
   await withBrowser(browserKey, p2,          (page, label) => errorFlow(page, label, p2));
 }
 
@@ -515,7 +600,7 @@ async function main() {
     return;
   }
 
-  const totalSessions = ROUNDS * BROWSERS.length * 5; // 5 flows per round
+  const totalSessions = ROUNDS * BROWSERS.length * 6; // 6 flows per round
 
   for (let i = 1; i <= ROUNDS; i++) {
     for (const browserKey of BROWSERS) {
