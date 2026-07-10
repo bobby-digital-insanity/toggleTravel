@@ -17,8 +17,10 @@ router.post('/seed', (req, res) => {
     return res.status(409).json({ error: 'Load generation already running', startedAt: activeJob.startedAt });
   }
 
-  const rounds = Math.min(Math.max(parseInt(req.body.rounds || '3', 10), 1), 10);
-  const pause  = Math.min(Math.max(parseInt(req.body.pause  || '3', 10), 1), 30);
+  const rounds   = Math.min(Math.max(parseInt(req.body.rounds || '3', 10), 1), 10);
+  const pause    = Math.min(Math.max(parseInt(req.body.pause  || '3', 10), 1), 30);
+  const atlantis     = Math.min(Math.max(parseInt(req.body.atlantis || '1', 10), 1), 20);
+  const atlantisOnly = req.body.atlantisOnly === true;
   const rawBrowsers = Array.isArray(req.body.browsers) ? req.body.browsers : (req.body.browsers || 'chrome').split(',');
   const browsers = [...new Set(rawBrowsers.map((b) => b.trim().toLowerCase()).filter((b) => VALID_BROWSERS.has(b)))];
   const browsersArg = browsers.length ? browsers.join(',') : 'chrome';
@@ -41,6 +43,8 @@ router.post('/seed', (req, res) => {
     '--rounds', String(rounds),
     '--pause', String(pause),
     '--browsers', browsersArg,
+    '--atlantis', String(atlantis),
+    ...(atlantisOnly ? ['--atlantis-only'] : []),
   ]);
 
   activeJob = { child, startedAt: new Date().toISOString(), rounds, browsers: browsersArg };

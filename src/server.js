@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors({
-  allowedHeaders: ["Content-Type", "Authorization", "traceparent", "tracestate", "x-highlight-request"],
+  allowedHeaders: ["Content-Type", "Authorization", "traceparent", "tracestate", "x-highlight-request", "x-session-id"],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

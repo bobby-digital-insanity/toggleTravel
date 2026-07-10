@@ -104,6 +104,33 @@
 
     .btn-cancel:hover { background: var(--error); color: white; }
 
+    .rollout-block {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-rollout {
+      width: 100%;
+      padding: 12px;
+      background: #405BFF;
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: .95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-rollout:hover:not(:disabled) { background: #2c41c4; }
+    .btn-rollout:disabled { opacity: .5; cursor: not-allowed; }
+
+
     .status-row {
       display: flex;
       align-items: center;
@@ -321,6 +348,14 @@
             <div class="rounds-pill" data-browser="pixel">Pixel</div>
           </div>
 
+          <div class="control-label" style="margin-top:16px">Atlantis surge</div>
+          <div class="rounds-pills" id="atlantis-pills">
+            <div class="rounds-pill selected" data-atlantis="1">×1</div>
+            <div class="rounds-pill" data-atlantis="5">×5</div>
+            <div class="rounds-pill" data-atlantis="10">×10</div>
+            <div class="rounds-pill" id="atlantis-only-pill" title="Skip all other flows — only Atlantis booking sessions">Only 🔱</div>
+          </div>
+
           <button class="btn-run" id="run-btn" onclick="startLoad()">
             ▶ Generate Traffic
           </button>
@@ -331,6 +366,18 @@
           <div class="status-row">
             <div class="status-dot" id="status-dot"></div>
             <span id="status-text">Ready</span>
+          </div>
+
+          <div class="rollout-block">
+            <div class="control-label" style="margin-bottom:12px">Guarded Rollout — Atlantis</div>
+            <button class="btn-rollout" id="rollout-btn" onclick="startGuardedRolloutTraffic()">
+              🛡 Start Guarded Rollout Traffic
+            </button>
+            <div style="font-size:.75rem;color:var(--text-muted);margin-top:10px;line-height:1.5">
+              Runs an Atlantis-only surge (×10 per round). Treatment-arm sessions hit the
+              Atlantis 404 and fire <code>booking-error</code> — your guarded rollout in
+              LaunchDarkly detects the regression and rolls the flag back.
+            </div>
           </div>
 
           <div class="flow-legend">
@@ -441,6 +488,24 @@
   <script>
     let selectedRounds = 3;
     let selectedBrowsers = new Set(['chrome']);
+    let selectedAtlantis = 1;
+    let atlantisOnly = false;
+
+    // Atlantis surge pill selection (single-select) — unique-persona Atlantis
+    // sessions per round, used to feed the guarded-rollout regression quickly.
+    document.querySelectorAll('.rounds-pill[data-atlantis]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.rounds-pill[data-atlantis]').forEach((p) => p.classList.remove('selected'));
+        pill.classList.add('selected');
+        selectedAtlantis = parseInt(pill.dataset.atlantis);
+      });
+    });
+
+    // "Only" toggle — skip all non-Atlantis flows for maximum regression signal
+    document.getElementById('atlantis-only-pill').addEventListener('click', function () {
+      atlantisOnly = !atlantisOnly;
+      this.classList.toggle('selected', atlantisOnly);
+    });
 
     // Rounds pill selection (single-select)
     document.querySelectorAll('.rounds-pill[data-rounds]').forEach((pill) => {
@@ -509,9 +574,11 @@
 
     async function startLoad() {
       const runBtn = document.getElementById('run-btn');
+      const rolloutBtn = document.getElementById('rollout-btn');
       const cancelBtn = document.getElementById('cancel-btn');
 
       runBtn.disabled = true;
+      rolloutBtn.disabled = true;
       cancelBtn.style.display = 'block';
       setStatus('running', 'Running…');
 
@@ -523,7 +590,7 @@
         const response = await fetch('/api/demo/seed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rounds: selectedRounds, pause: 3, browsers: [...selectedBrowsers] }),
+          body: JSON.stringify({ rounds: selectedRounds, pause: 3, browsers: [...selectedBrowsers], atlantis: selectedAtlantis, atlantisOnly }),
         });
 
         if (response.status === 409) {
@@ -563,6 +630,7 @@
         setStatus('error', 'Error');
       } finally {
         runBtn.disabled = false;
+        rolloutBtn.disabled = false;
         cancelBtn.style.display = 'none';
       }
     }
@@ -577,6 +645,28 @@
       }
       document.getElementById('run-btn').disabled = false;
       document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    // ── Guarded Rollout traffic preset ──────────────────────────────────────
+    // One click: select Atlantis surge ×10 + Only, then run the load generator.
+    // The guarded rollout itself is configured manually in LaunchDarkly —
+    // this just produces the error increase that trips its regression check.
+    function startGuardedRolloutTraffic() {
+      document.querySelectorAll('.rounds-pill[data-atlantis]').forEach((p) => {
+        p.classList.toggle('selected', p.dataset.atlantis === '10');
+      });
+      selectedAtlantis = 10;
+      if (!atlantisOnly) {
+        atlantisOnly = true;
+        document.getElementById('atlantis-only-pill').classList.add('selected');
+      }
+
+      appendLine('─'.repeat(60));
+      appendLine('🛡 Guarded rollout demo: Atlantis-only surge (×10 per round)');
+      appendLine('  → Each session gets a unique persona, split across your rollout arms.');
+      appendLine('  → Treatment-arm sessions book Atlantis, hit the 404, and fire booking-error.');
+      appendLine('  → Watch LaunchDarkly detect the regression and roll the flag back.');
+      startLoad();
     }
 
     // Check if already running on page load

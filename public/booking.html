@@ -119,7 +119,9 @@
 
   <div class="page-header">
     <div class="container">
-      <h1>Book Your Trip</h1>
+      <h1>Book Your Trip
+        <span id="checkout-v2-badge" style="display:none;vertical-align:middle;margin-left:10px;font-size:.72rem;font-weight:700;letter-spacing:.4px;background:linear-gradient(135deg,#405BFF,#7b8cff);color:#fff;border-radius:999px;padding:4px 12px">✨ NEW CHECKOUT</span>
+      </h1>
       <p>You're just a few steps away from your next adventure</p>
     </div>
   </div>
@@ -286,6 +288,15 @@
       applyTierEmail();
       window.addEventListener('tt:user-changed', applyTierEmail);
 
+      // "New checkout" badge follows the new-checkout-flow flag in real time —
+      // makes the 8am incident (and the recovery toggle) visible in session replays.
+      LDFlags.ready.then(() => {
+        const badge = document.getElementById('checkout-v2-badge');
+        const applyCheckoutBadge = (on) => { badge.style.display = on ? 'inline-block' : 'none'; };
+        applyCheckoutBadge(LDFlags.get('new-checkout-flow'));
+        LDFlags.onChange('new-checkout-flow', applyCheckoutBadge);
+      });
+
       // Default dates
       const dep = new Date(); dep.setDate(dep.getDate() + 30);
       const ret = new Date(); ret.setDate(ret.getDate() + 37);
@@ -410,6 +421,16 @@
         btn.textContent = 'Confirm & Pay →';
         spinner.style.display = 'none';
         errorEl.style.display = '';
+
+        // Fire the guard metric for the guarded-rollout demo — same LD client
+        // (and context) that evaluated atlantis-booking-enabled, so LD can
+        // attribute the regression to the rollout's treatment arm.
+        try {
+          window.LDFlags?.track('booking-error', {
+            destination_id: destinationId,
+            http_status: err.status,
+          });
+        } catch (_) { /* never block UI on telemetry */ }
 
         // Send the error to LD Observability so it appears on the Errors page,
         // grouped by message with the destination + amount as metadata.

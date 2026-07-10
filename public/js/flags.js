@@ -17,6 +17,7 @@ window.LDFlags = (function () {
     'promo-banner-text':          '',
     'ai-planner-enabled':         true,
     'atlantis-booking-enabled':   false,
+    'new-checkout-flow':          false,
   };
 
   // Set by Playwright load script (scripts/playwright-load.js) per browser session
@@ -131,6 +132,19 @@ window.LDFlags = (function () {
     }
   }
 
+  // Track a custom metric event against the current context. Used by the
+  // guarded-rollout demo: booking.html fires 'booking-error' on failed confirms,
+  // which LD attributes to the same context that evaluated the flag.
+  function track(eventName, data = undefined, metricValue = undefined) {
+    if (!ldClient) return;
+    try {
+      ldClient.track(eventName, data, metricValue);
+      console.log('[LD] Tracked event:', eventName);
+    } catch (err) {
+      console.warn('[LD] track failed:', err.message);
+    }
+  }
+
   // Identify a known user — call when their email becomes known (e.g. booking form, user select)
   async function identify(email, extras = {}) {
     if (!email) return;
@@ -148,5 +162,5 @@ window.LDFlags = (function () {
     }
   }
 
-  return { init, get, onChange, identify, flushSessionReplay, isLoadGen, ready };
+  return { init, get, onChange, identify, track, flushSessionReplay, isLoadGen, ready };
 }());

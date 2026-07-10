@@ -2,11 +2,29 @@
 
 const BASE = '';
 
+// Same identity precedence as flags.js — keeps the server-side LD context key
+// aligned with the browser SDK's context, so server flag evaluations and
+// logs/traces attribute to the same user.
+function sessionKey() {
+  try {
+    return (
+      localStorage.getItem('tt-user-email') ||
+      localStorage.getItem('tt-persona-email') ||
+      localStorage.getItem('tt-session-id') ||
+      ''
+    );
+  } catch (_) {
+    return '';
+  }
+}
+
 async function request(method, path, body) {
   const opts = {
     method,
     headers: { 'Content-Type': 'application/json' },
   };
+  const key = sessionKey();
+  if (key) opts.headers['x-session-id'] = key;
   if (body) opts.body = JSON.stringify(body);
 
   const res = await fetch(`${BASE}${path}`, opts);

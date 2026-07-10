@@ -18,5 +18,25 @@ module.exports = {
       error_file: '/var/log/toggle-travel/error.log',
       out_file: '/var/log/toggle-travel/out.log',
     },
+    {
+      // 24/7 traffic conductor — diurnal load gen + API traffic + daily
+      // 8am ET checkout incident (see scripts/traffic-conductor.js).
+      name: 'toggle-traffic',
+      script: 'scripts/traffic-conductor.js',
+      instances: 1,
+      exec_mode: 'fork',
+      max_memory_restart: '400M',
+      env_development: {
+        NODE_ENV: 'development',
+        TRAFFIC_ENABLED: 'false',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        TRAFFIC_ENABLED: 'true',
+      },
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: '/var/log/toggle-travel/traffic-error.log',
+      out_file: '/var/log/toggle-travel/traffic-out.log',
+    },
   ],
 };

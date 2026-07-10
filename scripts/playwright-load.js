@@ -21,6 +21,19 @@
  *   --rounds   <n>       Number of full rounds to run  (default: 3)
  *   --pause    <n>       Seconds to pause between rounds  (default: 3)
  *   --browsers <list>    Comma-separated browsers: chrome,firefox,safari,iphone,pixel
+ *   --atlantis <n>       Atlantis booking sessions per round (default 1, max 20).
+ *                        Values > 1 give each session a UNIQUE persona email so the
+ *                        guarded-rollout demo gets distinct randomization units
+ *                        split across both rollout arms.
+ *   --atlantis-only      Skip all other persona flows — every round runs ONLY the
+ *                        Atlantis booking sessions. Use with --atlantis to feed a
+ *                        guarded rollout's regression detection as fast as possible.
+ *   --unique-personas <pct>  Percent chance (0-100, default 0) that each flow runs
+ *                        as a brand-new synthetic identity instead of one of the five
+ *                        recurring personas. The 24/7 traffic conductor passes ~70 so
+ *                        LD shows a growing population of new users plus regulars.
+ *                        (Poseidon's Atlantis flow is never uniquified here — surge
+ *                        mode has its own unique-email scheme.)
  *                        (default: chrome)
  */
 
@@ -37,6 +50,9 @@ const BASE      = arg('--host')    || 'http://localhost:3000';
 const ROUNDS    = parseInt(arg('--rounds') || '3', 10);
 const PAUSE_SEC = parseInt(arg('--pause')  || '3', 10);
 const BROWSERS  = (arg('--browsers') || 'chrome').split(',').map((b) => b.trim().toLowerCase());
+const ATLANTIS       = Math.min(Math.max(parseInt(arg('--atlantis') || '1', 10), 1), 20);
+const ATLANTIS_ONLY  = process.argv.includes('--atlantis-only');
+const UNIQUE_PCT     = Math.min(Math.max(parseInt(arg('--unique-personas') || '0', 10), 0), 100);
 const RUN_ID    = Date.now().toString(36).slice(-6);
 
 // ── Logging (NDJSON-friendly stdout) ─────────────────────────────────────────
@@ -140,6 +156,42 @@ const PERSONAS = [
     geolocation: { latitude: 37.98, longitude: 23.73 },
   },
 ];
+
+// ── Synthetic visitors (--unique-personas) ────────────────────────────────────
+
+const VISITOR_NAMES = [
+  'maya', 'liam', 'zoe', 'noah', 'ava', 'ethan', 'mia', 'lucas', 'isla', 'owen',
+  'ruby', 'felix', 'nora', 'jude', 'iris', 'theo', 'cleo', 'max', 'lena', 'kai',
+];
+
+const VISITOR_LOCALES = [
+  { locale: 'en-US', timezone: 'America/New_York',    geolocation: { latitude: 40.71, longitude: -74.00 } },
+  { locale: 'en-US', timezone: 'America/Chicago',     geolocation: { latitude: 41.88, longitude: -87.63 } },
+  { locale: 'en-US', timezone: 'America/Los_Angeles', geolocation: { latitude: 34.05, longitude: -118.24 } },
+  { locale: 'en-GB', timezone: 'Europe/London',       geolocation: { latitude: 51.50, longitude: -0.12 } },
+  { locale: 'de-DE', timezone: 'Europe/Berlin',       geolocation: { latitude: 52.52, longitude: 13.40 } },
+  { locale: 'pt-BR', timezone: 'America/Sao_Paulo',   geolocation: { latitude: -23.55, longitude: -46.63 } },
+  { locale: 'en-AU', timezone: 'Australia/Sydney',    geolocation: { latitude: -33.87, longitude: 151.21 } },
+  { locale: 'es-MX', timezone: 'America/Mexico_City', geolocation: { latitude: 19.43, longitude: -99.13 } },
+];
+
+let visitorSeq = 0;
+
+// With --unique-personas <pct>, swap a recurring persona for a fresh synthetic
+// visitor pct% of the time. Fresh visitors get a new email (= new LD context)
+// and a random locale/geo so sessions look geographically organic.
+function maybeUniquePersona(persona) {
+  if (UNIQUE_PCT <= 0 || Math.random() * 100 >= UNIQUE_PCT) return persona;
+  const first = pick(VISITOR_NAMES);
+  const geo = pick(VISITOR_LOCALES);
+  visitorSeq += 1;
+  return {
+    ...persona,
+    ...geo,
+    name: first.charAt(0).toUpperCase() + first.slice(1),
+    email: `${first}-${RUN_ID}-${visitorSeq}@demo.toggletravel.io`,
+  };
+}
 
 // ── Browser configurations ────────────────────────────────────────────────────
 
@@ -565,22 +617,38 @@ async function runRound(round, browserKey) {
   process.stdout.write(`Round ${round} of ${ROUNDS}  [${config.label}]\n`);
   separator();
 
-  await withBrowser(browserKey, p2,          (page, label) => windowShopper(page, label, p2));
-  await sleep(jitter(1500, 2500));
+  if (!ATLANTIS_ONLY) {
+    const shopper1 = maybeUniquePersona(p2);
+    await withBrowser(browserKey, shopper1,  (page, label) => windowShopper(page, label, shopper1));
+    await sleep(jitter(1500, 2500));
 
-  await withBrowser(browserKey, p3,          (page, label) => windowShopper(page, label, p3));
-  await sleep(jitter(1500, 2500));
+    const shopper2 = maybeUniquePersona(p3);
+    await withBrowser(browserKey, shopper2,  (page, label) => windowShopper(page, label, shopper2));
+    await sleep(jitter(1500, 2500));
 
-  await withBrowser(browserKey, p1,          (page, label) => abandonedCheckout(page, label, p1));
-  await sleep(jitter(1500, 2500));
+    const abandoner = maybeUniquePersona(p1);
+    await withBrowser(browserKey, abandoner, (page, label) => abandonedCheckout(page, label, abandoner));
+    await sleep(jitter(1500, 2500));
 
-  await withBrowser(browserKey, p0,          (page, label) => completeBooking(page, label, p0));
-  await sleep(jitter(1500, 2500));
+    const booker = maybeUniquePersona(p0);
+    await withBrowser(browserKey, booker,    (page, label) => completeBooking(page, label, booker));
+    await sleep(jitter(1500, 2500));
+  }
 
-  await withBrowser(browserKey, p4,          (page, label) => atlantisBooking(page, label, p4));
-  await sleep(jitter(1500, 2500));
+  // Atlantis sessions — in surge mode (--atlantis > 1) each gets a unique
+  // email so the guarded rollout buckets them as distinct users across arms.
+  for (let a = 0; a < ATLANTIS; a++) {
+    const poseidon = ATLANTIS > 1
+      ? { ...p4, email: `poseidon+${RUN_ID}-r${round}-${a}@demo.toggletravel.io` }
+      : p4;
+    await withBrowser(browserKey, poseidon,  (page, label) => atlantisBooking(page, label, poseidon));
+    await sleep(jitter(500, 1200));
+  }
 
-  await withBrowser(browserKey, p2,          (page, label) => errorFlow(page, label, p2));
+  if (!ATLANTIS_ONLY) {
+    await sleep(jitter(1000, 1500));
+    await withBrowser(browserKey, p2,        (page, label) => errorFlow(page, label, p2));
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -588,7 +656,7 @@ async function runRound(round, browserKey) {
 async function main() {
   process.stdout.write('Toggle Travel — Playwright Load\n');
   process.stdout.write(`Host:     ${BASE}\n`);
-  process.stdout.write(`Rounds:   ${ROUNDS}  |  Pause: ${PAUSE_SEC}s  |  Browsers: ${BROWSERS.join(', ')}\n`);
+  process.stdout.write(`Rounds:   ${ROUNDS}  |  Pause: ${PAUSE_SEC}s  |  Browsers: ${BROWSERS.join(', ')}${ATLANTIS > 1 ? `  |  Atlantis surge: ×${ATLANTIS}` : ''}${ATLANTIS_ONLY ? '  |  ATLANTIS ONLY' : ''}\n`);
   process.stdout.write(`Run ID:   ${RUN_ID}\n`);
 
   // Validate browser list
@@ -610,7 +678,7 @@ async function main() {
     return;
   }
 
-  const totalSessions = ROUNDS * BROWSERS.length * 6; // 6 flows per round
+  const totalSessions = ROUNDS * BROWSERS.length * (ATLANTIS_ONLY ? ATLANTIS : 5 + ATLANTIS); // flows per round
 
   for (let i = 1; i <= ROUNDS; i++) {
     for (const browserKey of BROWSERS) {
