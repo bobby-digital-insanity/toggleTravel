@@ -8,6 +8,7 @@ window.LDFlags = (function () {
   let ldClient = null;
   let initPromise = null;
   let readyResolve;
+  let maskedAtInit = false; // whether this page's replay started in Diamond strict mode
   const ready = new Promise((r) => { readyResolve = r; });
 
   const DEFAULTS = {
@@ -59,13 +60,26 @@ window.LDFlags = (function () {
     try {
       if (window.LDRecord?.addSessionProperties) {
         const plan = resolvePlan();
-        window.LDRecord.addSessionProperties({ plan });
+        window.LDRecord.addSessionProperties({ plan, masked: plan === 'Diamond' });
         console.log('[LD] Session property set — plan:', plan);
       }
     } catch (err) {
       console.warn('[LD] addSessionProperties failed:', err.message);
     }
   }
+
+  // privacySetting is fixed when the SessionReplay plugin is constructed, so a
+  // mid-session tier switch that crosses the Diamond boundary (in either
+  // direction) needs a fresh page load for masking to apply. nav.js fires
+  // tt:user-changed on every sign-in/sign-out.
+  window.addEventListener('tt:user-changed', () => {
+    if (!ldClient) return;
+    const nowMasked = resolvePlan() === 'Diamond';
+    if (nowMasked !== maskedAtInit) {
+      console.log('[LD] Plan crossed the Diamond boundary — reloading to apply replay privacy');
+      location.reload();
+    }
+  });
 
   async function init() {
     if (ldClient) return;
@@ -108,14 +122,19 @@ window.LDFlags = (function () {
         console.log('[LD] Observability plugin enabled');
       }
       if (typeof SessionReplay !== 'undefined' && SessionReplay.default) {
-        // LD defaults to privacySetting 'strict' (masks all text + images). Use 'none' for
-        // readable demo replays; switch to 'default' in production to mask PII inputs/patterns.
+        // Privacy is decided per user at record time: Diamond-plan users are
+        // automatically masked ('strict' masks all text + images in the browser,
+        // before anything is uploaded). Everyone else records readable ('none')
+        // for demo purposes; real apps would use 'default' or 'strict' here.
+        // resolvePlan() is synchronous (localStorage only), so the plan is
+        // known before the plugin is constructed.
+        maskedAtInit = resolvePlan() === 'Diamond';
         plugins.push(new SessionReplay.default({
-          privacySetting: 'none',
+          privacySetting: maskedAtInit ? 'strict' : 'none',
           inlineStylesheet: true,
           inlineImages: true,
         }));
-        console.log('[LD] Session Replay plugin enabled (privacySetting: none)');
+        console.log(`[LD] Session Replay plugin enabled (privacySetting: ${maskedAtInit ? 'strict, Diamond auto-mask' : 'none'})`);
       }
 
       ldClient = LDClient.initialize(ldClientSideId, context, { plugins });

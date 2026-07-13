@@ -672,16 +672,23 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               <ul>
                 <li><strong><code>strict</code></strong> (the default) masks <em>all</em> text and images. Safest, and the out-of-the-box behavior.</li>
                 <li><strong><code>default</code></strong> masks inputs and text matching common PII patterns (emails, SSNs, card numbers) and leaves general content readable.</li>
-                <li><strong><code>none</code></strong> records everything. What this demo app uses, so replays are fully readable on stage.</li>
+                <li><strong><code>none</code></strong> records everything. What this demo app uses for most visitors, so replays are fully readable on stage.</li>
               </ul>
+              <p>Privacy doesn't have to be one-size-fits-all. This app decides <strong>per user, at record time</strong>: anyone on the <strong>Diamond plan is masked automatically</strong>, while everyone else records readable. The plan is resolved from local state before the recording plugin is constructed, so the right privacy mode is active from the first frame.</p>
             </div>
             <div class="code-block">
-<span class="code-comment">// flags.js: this app deliberately disables masking for demo readability</span><br>
-<span class="code-comment">// "LD defaults to privacySetting 'strict' (masks all text + images). Use 'none' for</span><br>
-<span class="code-comment">//  readable demo replays; switch to 'default' in production to mask PII inputs/patterns."</span><br>
+<span class="code-comment">// flags.js: privacy chosen per user before recording starts</span><br>
+<span class="code-key">const</span> plan = <span class="code-fn">resolvePlan</span>();&nbsp;&nbsp;<span class="code-comment">// nav tier, persona plan, or stable fallback</span><br>
 <span class="code-key">new</span> SessionReplay.<span class="code-fn">default</span>({<br>
-&nbsp;&nbsp;<span class="code-key">privacySetting</span>: <span class="code-str">'none'</span>,&nbsp;&nbsp;<span class="code-comment">// 'strict' | 'default' | 'none'</span><br>
+&nbsp;&nbsp;<span class="code-key">privacySetting</span>: plan === <span class="code-str">'Diamond'</span> ? <span class="code-str">'strict'</span> : <span class="code-str">'none'</span>,<br>
 });
+            </div>
+            <div class="callout callout--ld">
+              <div class="callout-icon">💎</div>
+              <div class="callout-body">
+                <strong>Try it: Diamond users mask themselves</strong>
+                <p>Sign in as the Diamond user from the nav and browse. Your session records fully masked. In LD, filter sessions by plan = Diamond (or masked = true) and compare a Diamond replay to a Gold one: same app, same pages, two privacy modes.</p>
+              </div>
             </div>
             <div class="callout callout--warn">
               <div class="callout-icon">⚠️</div>
