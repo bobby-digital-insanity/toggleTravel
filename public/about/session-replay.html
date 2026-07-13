@@ -663,7 +663,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               <h3>What one session includes</h3>
               <p>A session <strong>spans page navigations</strong>. Browse the home page, run a search, open a destination, and book: that whole journey is one replay, one timeline. The load-gen personas prove it, walking multiple pages in a single recording.</p>
               <h3>When it ends</h3>
-              <p>Sessions end after a period of <strong>user inactivity</strong> or when the tab closes; the exact windows are in the configuration docs. One nuance from this app: calling <code>ldClient.identify()</code> with a new context tears down the current replay and starts a fresh one, which is why the load gen sets persona identity <em>before</em> first page load instead of re-identifying mid-session.</p>
+              <p>A session records for <strong>up to four hours</strong>. Each browser tab is its own session, so two open tabs produce two recordings. If the app closes and reopens in the same tab within 15 minutes, the prior session resumes; any longer and a new session begins. LaunchDarkly also tracks <strong>active time</strong> separately: stretches of clicking, typing, or mouse movement without a gap of more than 10 seconds. The full rules are in <a href="https://launchdarkly.com/docs/home/observability/session-replay#how-is-a-session-defined" target="_blank" rel="noopener">How is a session defined</a>.</p>
               <h3>How to control it</h3>
             </div>
             <div class="code-block">
@@ -675,15 +675,9 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
 <span class="code-comment">// This app flushes instead of stopping (scripts/playwright-load.js):</span><br>
 <span class="code-key">await</span> ldClient.<span class="code-fn">flush</span>();&nbsp;&nbsp;<span class="code-comment">// push replay data before the tab closes</span>
             </div>
-            <div class="callout callout--warn">
-              <div class="callout-icon">⚠️</div>
-              <div class="callout-body">
-                <strong>Lesson from the load generator</strong>
-                <p>Headless browsers skip the normal page-unload path, so replay data buffered in the browser can be lost when the tab closes instantly. The load gen calls flush() and waits before closing, and never calls stop(), because stop() cancels uploads still in flight.</p>
-              </div>
-            </div>
             <div class="doc-links">
-              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session lifecycle &amp; configuration</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay#how-is-a-session-defined" target="_blank" rel="noopener">📘 How is a session defined</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session Replay configuration</a>
             </div>
             <img src="/images/session-replay/sr-lifecycle.png" alt="Session detail header showing total length versus active time across multiple page views" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">One session, multiple pages: total duration vs active interaction time</p>
@@ -717,13 +711,6 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
 &nbsp;&nbsp;<span class="code-key">privacySetting</span>: plan === <span class="code-str">'Diamond'</span> ? <span class="code-str">'strict'</span> : <span class="code-str">'none'</span>,<br>
 });
             </div>
-            <div class="callout callout--ld">
-              <div class="callout-icon">💎</div>
-              <div class="callout-body">
-                <strong>Try it: Diamond users mask themselves</strong>
-                <p>Sign in as the Diamond user from the nav and browse. Your session records fully masked. In LD, filter sessions by plan = Diamond (or masked = true) and compare a Diamond replay to a Gold one: same app, same pages, two privacy modes.</p>
-              </div>
-            </div>
             <div class="callout callout--warn">
               <div class="callout-icon">⚠️</div>
               <div class="callout-body">
@@ -732,7 +719,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               </div>
             </div>
             <div class="doc-links">
-              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Privacy &amp; masking configuration</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config#privacy" target="_blank" rel="noopener">📘 Privacy &amp; masking configuration</a>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0 6px">
               <img src="/images/session-replay/sr-masking.png" alt="Admin user replay recorded without masking: fully readable" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)">
@@ -775,7 +762,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
 <span class="code-fn">LDFlags</span>.<span class="code-fn">track</span>(<span class="code-str">'booking-error'</span>,&nbsp;&nbsp;&nbsp;{ <span class="code-key">destination_id</span>, <span class="code-key">http_status</span> });
             </div>
             <div class="doc-links">
-              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Add session properties</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config#add-session-properties" target="_blank" rel="noopener">📘 Add session properties</a>
               <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay overview</a>
             </div>
             <img src="/images/session-replay/sr-metadata.png" alt="Session detail pane showing plan, persona, and personaEmail properties with track-event markers on the timeline" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
@@ -805,19 +792,20 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               </ul>
               <p>The same query language powers errors, logs, and traces: one syntax across the Observability platform.</p>
             </div>
-            <div class="callout callout--code">
-              <div class="callout-icon">💡</div>
-              <div class="callout-body">
-                <strong>Semantic events beat selector searches</strong>
-                <p>clickTextContent can lie. This app's Confirm button reads "Processing…" by the time the click is captured, because the handler swaps the label first. Named track events like confirm-booking are immune to UI copy and DOM refactors.</p>
-              </div>
-            </div>
-            <div class="doc-links">
-              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/search" target="_blank" rel="noopener">📘 Search specification</a>
-              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay docs</a>
-            </div>
             <img src="/images/session-replay/sr-search.png" alt="Sessions view filtered by session property and error state, showing the query bar" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">Combining a session property with an error filter to triage high-value users</p>
+            <div class="prose">
+              <h3>No query required: Vega AI</h3>
+              <p>Not everyone wants to learn filter syntax, and with <strong>Vega AI</strong> they don't have to. Vega is LaunchDarkly's built-in AI assistant: ask a question in plain English right from the Sessions view and it finds the matching sessions, links each replay, and explains what happened in them. In the screenshot below it was asked for one user's sessions during an afternoon window. It returned all eleven matching replays, walked through the identical journey in each, and root-caused the failure down to the exact file and line on both the frontend and the backend. Support, product, and leadership get answers without ever writing a query.</p>
+              <p>The same idea extends beyond the LaunchDarkly UI. LaunchDarkly ships an <strong>Observability MCP server</strong>, so you can connect an AI assistant like Claude directly to your observability data and ask it to pull sessions, errors, logs, and traces for you. Point your assistant at the <a href="https://mcp.launchdarkly.com/mcp/launchdarkly" target="_blank" rel="noopener">hosted MCP endpoint</a> and see the <a href="https://launchdarkly.com/docs/home/getting-started/mcp" target="_blank" rel="noopener">MCP setup docs</a> to get started.</p>
+            </div>
+            <img src="/images/session-replay/sr-search-vegaAI.png" alt="Vega AI in the Sessions view answering a plain-English question with linked session replays and a root cause" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:16px 0 6px">
+            <p class="img-caption">Vega AI asked in plain English for one user's sessions: eleven linked replays, a walkthrough of each, and the root cause</p>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/search" target="_blank" rel="noopener">📘 Search specification</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/getting-started/mcp" target="_blank" rel="noopener">🤖 LaunchDarkly MCP server</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay docs</a>
+            </div>
           </div>
         </details>
 
