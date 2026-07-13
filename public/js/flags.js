@@ -35,6 +35,38 @@ window.LDFlags = (function () {
     return key;
   }
 
+  // ── Plan session property ───────────────────────────────────────────────
+  // Every recorded session gets a `plan` property (searchable in Session Replay).
+  // Precedence: signed-in nav tier → load-gen persona plan (tt-user-plan) →
+  // stable hash of the context key (anonymous visitors keep the same plan
+  // across visits).
+  const PLANS = ['Beta', 'Silver', 'Gold', 'Platinum', 'Diamond'];
+
+  function resolvePlan() {
+    const tier = localStorage.getItem('tt-user-tier');
+    if (tier) return tier.charAt(0).toUpperCase() + tier.slice(1); // 'gold' → 'Gold'
+
+    const injected = localStorage.getItem('tt-user-plan'); // set by load gen
+    if (injected) return injected;
+
+    const key = localStorage.getItem('tt-persona-email') || getSessionKey();
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    return PLANS[Math.abs(hash) % PLANS.length];
+  }
+
+  function setPlanSessionProperty() {
+    try {
+      if (window.LDRecord?.addSessionProperties) {
+        const plan = resolvePlan();
+        window.LDRecord.addSessionProperties({ plan });
+        console.log('[LD] Session property set — plan:', plan);
+      }
+    } catch (err) {
+      console.warn('[LD] addSessionProperties failed:', err.message);
+    }
+  }
+
   async function init() {
     if (ldClient) return;
     if (initPromise) return initPromise;
@@ -93,6 +125,7 @@ window.LDFlags = (function () {
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
     } finally {
+      setPlanSessionProperty();
       readyResolve();
     }
     })();
@@ -157,6 +190,7 @@ window.LDFlags = (function () {
       const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}), ...extras };
       await ldClient.identify(ctx);
       console.log('[LD] Identified user:', email, extras);
+      setPlanSessionProperty(); // tier may have just changed (nav user switch)
     } catch (err) {
       console.warn('[LD] identify failed:', err.message);
     }

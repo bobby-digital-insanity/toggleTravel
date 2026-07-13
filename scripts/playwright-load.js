@@ -76,18 +76,18 @@ async function flushLdSessionReplay(page, persona) {
       { timeout: 10000 },
     ).catch(() => {});
 
-    const result = await page.evaluate(async ({ name, email }) => {
+    const result = await page.evaluate(async ({ name, email, plan }) => {
       const state = window.LDRecord?.getRecordingState?.() ?? 'not-ready';
       if (window.LDRecord?.addSessionProperties) {
         try {
-          window.LDRecord.addSessionProperties({ persona: name, personaEmail: email });
+          window.LDRecord.addSessionProperties({ persona: name, personaEmail: email, ...(plan ? { plan } : {}) });
         } catch { /* ignore */ }
       }
       const flushed = window.LDFlags?.flushSessionReplay
         ? await window.LDFlags.flushSessionReplay()
         : false;
       return { flushed, state };
-    }, { name: persona.name, email: persona.email });
+    }, { name: persona.name, email: persona.email, plan: persona.plan || null });
 
     // Upload window runs on the Node side (evaluate must not block 6s+ — hangs the stream).
     await sleep(8000);
@@ -108,6 +108,7 @@ const PERSONAS = [
   {
     name:       'Alex',
     email:      'alex@demo.toggletravel.io',
+    plan:       'Gold',
     budget:     'mid',
     styles:     ['adventure', 'culture'],
     region:     'asia',
@@ -118,6 +119,7 @@ const PERSONAS = [
   {
     name:       'Jordan',
     email:      'jordan@demo.toggletravel.io',
+    plan:       'Diamond',
     budget:     'luxury',
     styles:     ['luxury', 'wellness'],
     region:     'europe',
@@ -128,6 +130,7 @@ const PERSONAS = [
   {
     name:       'Sam',
     email:      'sam@demo.toggletravel.io',
+    plan:       'Beta',
     budget:     'budget',
     styles:     ['backpacking', 'beach'],
     region:     'americas',
@@ -138,6 +141,7 @@ const PERSONAS = [
   {
     name:       'Taylor',
     email:      'taylor@demo.toggletravel.io',
+    plan:       'Silver',
     budget:     'mid',
     styles:     ['food', 'culture'],
     region:     'europe',
@@ -148,6 +152,7 @@ const PERSONAS = [
   {
     name:       'Poseidon',
     email:      'poseidon@demo.toggletravel.io',
+    plan:       'Platinum',
     budget:     'luxury',
     styles:     ['ocean', 'mythology'],
     region:     'oceania',
@@ -156,6 +161,8 @@ const PERSONAS = [
     geolocation: { latitude: 37.98, longitude: 23.73 },
   },
 ];
+
+const PLAN_TIERS = ['Beta', 'Silver', 'Gold', 'Platinum', 'Diamond'];
 
 // ── Synthetic visitors (--unique-personas) ────────────────────────────────────
 
@@ -190,6 +197,7 @@ function maybeUniquePersona(persona) {
     ...geo,
     name: first.charAt(0).toUpperCase() + first.slice(1),
     email: `${first}-${RUN_ID}-${visitorSeq}@demo.toggletravel.io`,
+    plan: pick(PLAN_TIERS),
   };
 }
 
@@ -224,10 +232,11 @@ async function withBrowser(browserKey, persona, fn) {
   };
 
   const context = await browser.newContext(contextOpts);
-  await context.addInitScript(({ runId, personaEmail }) => {
+  await context.addInitScript(({ runId, personaEmail, personaPlan }) => {
     localStorage.setItem('tt-run-id', runId);
     localStorage.setItem('tt-persona-email', personaEmail);
-  }, { runId: RUN_ID, personaEmail: persona.email });
+    if (personaPlan) localStorage.setItem('tt-user-plan', personaPlan);
+  }, { runId: RUN_ID, personaEmail: persona.email, personaPlan: persona.plan || null });
   const page    = await context.newPage();
 
   // Surface LD init/replay logs and errors in the load-gen terminal

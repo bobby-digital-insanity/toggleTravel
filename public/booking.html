@@ -385,6 +385,16 @@
       const spinner = document.getElementById('confirm-spinner');
       const errorEl = document.getElementById('booking-error');
 
+      // Semantic event: user clicked Confirm & Pay. Searchable in LD by name —
+      // pairs with 'booking-error' (failure) to form the checkout funnel.
+      try {
+        LDFlags.track('confirm-booking', {
+          destination_id: destinationId,
+          destination_name: destData?.name,
+          travelers: parseInt(document.getElementById('f-travelers').value, 10),
+        });
+      } catch (_) { /* never block checkout on telemetry */ }
+
       btn.disabled = true;
       btn.textContent = 'Processing…';
       spinner.style.display = '';
