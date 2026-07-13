@@ -395,13 +395,7 @@
         </div>
 
         <div>
-          <!-- Replace this placeholder with a real screenshot:
-               <img src="/images/sr-overview.png" alt="LD Sessions list" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"> -->
-          <div class="img-placeholder">
-            <div class="ph-icon">📸</div>
-            <div class="ph-label">Screenshot placeholder: Sessions overview</div>
-            <div class="ph-hint">LD UI → Telemetry → Sessions: the session list with identifiers, duration, device, and error badges</div>
-          </div>
+          <img src="/images/session-replay/sr-overview.png" alt="LD Observability Sessions list showing identifiers, duration, device, and error badges" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
           <p class="img-caption">The LD Observability Sessions view. One row per recorded visit.</p>
         </div>
       </div>
@@ -465,12 +459,7 @@
           <p>Every Atlantis 404 links to a replay of Poseidon hitting the failure. During the daily 8am checkout incident, replays show the <strong>"✨ NEW CHECKOUT" badge</strong> on screen while confirms fail, then the badge vanishing once the flag is toggled off. Jordan's abandoned checkouts and the <code>confirm-booking</code> funnel events round out the story.</p>
         </div>
         <div>
-          <!-- Replace with: <img src="/images/sr-use-cases.png" alt="Session player" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"> -->
-          <div class="img-placeholder" style="margin-top:0">
-            <div class="ph-icon">📸</div>
-            <div class="ph-label">Screenshot placeholder: Session player</div>
-            <div class="ph-hint">A replay mid-playback: timeline markers for clicks, errors, and track events under the viewport</div>
-          </div>
+          <img src="/images/session-replay/sr-use-cases.png" alt="Session player mid-playback with timeline markers for clicks, errors, and track events" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:0 0 6px">
           <p class="img-caption">The session player: scrub the timeline, jump to error markers</p>
         </div>
       </div>
@@ -597,12 +586,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session Replay configuration</a>
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/observability" target="_blank" rel="noopener">📘 Observability SDKs</a>
             </div>
-            <!-- Replace with: <img src="/images/sr-setup.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder: First sessions arriving</div>
-              <div class="ph-hint">Sessions list minutes after enabling the plugin: the moment the integration comes alive</div>
-            </div>
+            <img src="/images/session-replay/sr-setup.png" alt="Sessions list filling in minutes after enabling the Session Replay plugin" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">Sessions begin appearing within minutes of adding the plugin</p>
           </div>
         </details>
@@ -646,12 +630,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="doc-links">
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session lifecycle &amp; configuration</a>
             </div>
-            <!-- Replace with: <img src="/images/sr-lifecycle.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder: Session duration &amp; active time</div>
-              <div class="ph-hint">A session's detail header showing total length vs active time, across multiple page views</div>
-            </div>
+            <img src="/images/session-replay/sr-lifecycle.png" alt="Session detail header showing total length versus active time across multiple page views" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">One session, multiple pages: total duration vs active interaction time</p>
           </div>
         </details>
@@ -700,13 +679,11 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="doc-links">
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Privacy &amp; masking configuration</a>
             </div>
-            <!-- Replace with: <img src="/images/sr-masking.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder: Masked vs unmasked replay</div>
-              <div class="ph-hint">Side-by-side of the booking form under privacySetting 'strict' (asterisked) and 'none' (readable)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0 6px">
+              <img src="/images/session-replay/sr-masking.png" alt="Admin user replay recorded without masking: fully readable" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)">
+              <img src="/images/session-replay/sr-masking1.png" alt="Diamond user replay recorded with strict masking: all text obscured at capture time" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)">
             </div>
-            <p class="img-caption">The same booking form recorded under different privacy settings</p>
+            <p class="img-caption">The same app, two privacy modes: an admin session records readable (left) while the Diamond user's session masks automatically (right)</p>
           </div>
         </details>
 
@@ -746,12 +723,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Add session properties</a>
               <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay overview</a>
             </div>
-            <!-- Replace with: <img src="/images/sr-metadata.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder: Session properties panel</div>
-              <div class="ph-hint">A session's detail pane showing plan: Gold, persona, personaEmail, and the track-event markers on the timeline</div>
-            </div>
+            <img src="/images/session-replay/sr-metadata.png" alt="Session detail pane showing plan, persona, and personaEmail properties with track-event markers on the timeline" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">Custom properties and track events attached to a recorded session</p>
           </div>
         </details>
@@ -789,12 +761,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
               <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/search" target="_blank" rel="noopener">📘 Search specification</a>
               <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay docs</a>
             </div>
-            <!-- Replace with: <img src="/images/sr-search.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder: Filtered session search</div>
-              <div class="ph-hint">Sessions view filtered to plan = Diamond AND has_errors = true, showing the query bar</div>
-            </div>
+            <img src="/images/session-replay/sr-search.png" alt="Sessions view filtered by session property and error state, showing the query bar" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin:20px 0 6px">
             <p class="img-caption">Combining a session property with an error filter to triage high-value users</p>
           </div>
         </details>
