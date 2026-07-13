@@ -128,7 +128,7 @@
     }
     .doc-link:hover { background: #dbeafe; text-decoration: none; }
 
-    /* Screenshot placeholder — swap the inner div for an <img> when ready */
+    /* Screenshot placeholder: swap the inner div for an <img> when ready */
     .img-placeholder {
       border: 2px dashed var(--border);
       border-radius: var(--radius);
@@ -258,6 +258,87 @@
     .flow-num--green { background: #d1fae5; color: #065f46; }
     .flow-text strong { display: block; font-size: .9rem; font-weight: 700; margin-bottom: 3px; }
     .flow-text span { font-size: .82rem; color: var(--text-muted); line-height: 1.5; }
+
+    /* Persona table */
+    .persona-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      font-size: .88rem;
+      margin: 32px 0;
+    }
+    .persona-table th {
+      text-align: left;
+      background: #1e1b4b;
+      color: #fff;
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 14px 18px;
+    }
+    .persona-table td {
+      padding: 16px 18px;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+    .persona-table td:first-child { white-space: nowrap; }
+    .persona-table tr:nth-child(even) td { background: var(--surface-2); }
+    .persona-role {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .persona-table td:not(:first-child) { color: var(--text-muted); }
+    @media (max-width: 768px) {
+      .persona-table { display: block; overflow-x: auto; }
+      .persona-table td:first-child { white-space: normal; }
+    }
+
+    /* Win story card */
+    .win-story {
+      background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%);
+      border-radius: var(--radius);
+      color: #fff;
+      padding: 36px 40px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 32px;
+      align-items: center;
+      margin-top: 40px;
+    }
+    @media (max-width: 768px) { .win-story { grid-template-columns: 1fr; text-align: center; } }
+    .win-stat { text-align: center; }
+    .win-stat .num { font-size: 2.6rem; font-weight: 900; line-height: 1; }
+    .win-stat .label { font-size: .75rem; font-weight: 600; opacity: .75; margin-top: 6px; max-width: 130px; }
+    .win-body .eyebrow-light {
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      opacity: .65;
+      margin-bottom: 8px;
+    }
+    .win-body h3 { font-size: 1.25rem; font-weight: 800; margin-bottom: 10px; }
+    .win-body p { font-size: .9rem; line-height: 1.7; opacity: .88; margin: 0; }
+    .win-story .btn-white {
+      background: #fff;
+      color: #3730a3;
+      font-weight: 700;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: .88rem;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .win-story .btn-white:hover { opacity: .9; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -284,8 +365,8 @@
         <span class="breadcrumb-sep">/</span>
         <span>Session Replay</span>
       </div>
-      <h1>📹 Session Replay —<br>every session, reconstructed</h1>
-      <p>Watch exactly what your users experienced — every click, scroll, form fill, error banner, and feature-flag change — replayed as a pixel-faithful reconstruction of the real session. Not a video: a recording of the DOM itself.</p>
+      <h1>📹 Session Replay:<br>every session, reconstructed</h1>
+      <p>Watch exactly what your users experienced. Every click, scroll, form fill, error banner, and feature-flag change, replayed as a pixel-faithful reconstruction of the real session. Not a video: a recording of the DOM itself.</p>
       <div class="tag-row">
         <span class="tag">🔵 LD Session Replay plugin</span>
         <span class="tag">🎬 Built on rrweb</span>
@@ -300,15 +381,15 @@
       <div class="two-col">
         <div class="prose">
           <h2>What session replay is</h2>
-          <p>Session Replay records the browser's <strong>DOM</strong> — an initial snapshot of the page, then a stream of incremental mutations: nodes added, text changed, inputs typed, mouse moved, pages navigated. The LaunchDarkly player reconstructs the session from those events, so you can scrub through a user's visit like a timeline.</p>
-          <p>Because it's <strong>events, not pixels</strong>, recordings are lightweight, sensitive fields can be masked <em>at capture time</em> (the real value never leaves the browser), and every moment is inspectable — you can pause a replay and see exactly which elements were on screen.</p>
-          <p>In Toggle Travel, every visit — real users and the 24/7 load-gen personas alike — is recorded and linked to the same LaunchDarkly context used for flag evaluations. That's the superpower: <strong>replays, errors, traces, logs, and flags all share one identity.</strong></p>
+          <p>Session replay lets you <strong>watch a recording of any user's visit</strong>: exactly what they saw and did, page by page, click by click, scroll by scroll. When someone says <em>"the site didn't work,"</em> you don't ask them to describe it. You press play.</p>
+          <p>Every visit to Toggle Travel is recorded automatically, real users and the 24/7 demo personas alike. Each recording knows <strong>who</strong> the user is, <strong>what</strong> they clicked, <strong>where</strong> things went wrong, and <strong>which features were turned on</strong> for them at the time.</p>
+          <p>The result: minutes of guesswork replace hours of back-and-forth. Support sees what the customer saw. Engineers see the bug happen. Product sees where users get stuck. Everyone watches the same movie.</p>
 
           <div class="callout callout--ld">
             <div class="callout-icon">🔵</div>
             <div class="callout-body">
-              <strong>One context, five signals</strong>
-              <p>When Poseidon's Atlantis booking fails, you can jump from the error → the session replay of the failure → the flag evaluations active in that session → the server trace of the 404 — all keyed to poseidon@demo.toggletravel.io.</p>
+              <strong>From complaint to evidence in one click</strong>
+              <p>A booking fails → open the replay of that exact session → watch the user hit the error, with everything about their visit attached. No reproduction steps required.</p>
             </div>
           </div>
         </div>
@@ -318,72 +399,93 @@
                <img src="/images/sr-overview.png" alt="LD Sessions list" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"> -->
           <div class="img-placeholder">
             <div class="ph-icon">📸</div>
-            <div class="ph-label">Screenshot placeholder — Sessions overview</div>
+            <div class="ph-label">Screenshot placeholder: Sessions overview</div>
             <div class="ph-hint">LD UI → Telemetry → Sessions: the session list with identifiers, duration, device, and error badges</div>
           </div>
-          <p class="img-caption">The LD Observability Sessions view — one row per recorded visit</p>
+          <p class="img-caption">The LD Observability Sessions view. One row per recorded visit.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- RRWEB -->
+  <!-- USE CASES -->
   <section class="content-section" style="background:var(--surface-2)">
     <div class="container">
       <div class="section-header">
-        <div class="eyebrow">Under the hood</div>
-        <h2>Built on rrweb</h2>
-        <p>LaunchDarkly Session Replay is built on <strong>rrweb</strong> ("record and replay the web") — the open-source standard for DOM recording.</p>
+        <div class="eyebrow">Use cases</div>
+        <h2>Who watches replays, and why</h2>
+        <p>Session replay isn't a developer-only tool. The same recording answers a different question for every level of the organization.</p>
       </div>
 
-      <div class="two-col" style="margin-top:40px">
-        <div>
-          <div class="flow-diagram">
-            <div class="flow-step">
-              <div class="flow-num flow-num--blue">1</div>
-              <div class="flow-text">
-                <strong>Full DOM snapshot</strong>
-                <span>On session start, rrweb serializes the entire document — elements, styles, images — into a JSON snapshot</span>
-              </div>
-            </div>
-            <div class="flow-step">
-              <div class="flow-num flow-num--blue">2</div>
-              <div class="flow-text">
-                <strong>Incremental mutations</strong>
-                <span>A MutationObserver + input/scroll/mouse listeners emit tiny diff events for every change after that</span>
-              </div>
-            </div>
-            <div class="flow-step">
-              <div class="flow-num flow-num--purple">3</div>
-              <div class="flow-text">
-                <strong>Chunked upload</strong>
-                <span>The LD plugin batches events and ships them to LD's session ingest endpoint, tagged with your LD context</span>
-              </div>
-            </div>
-            <div class="flow-step">
-              <div class="flow-num flow-num--green">4</div>
-              <div class="flow-text">
-                <strong>Reconstruction in the player</strong>
-                <span>The LD UI replays snapshot + mutations in a sandboxed iframe — a faithful rebuild of what the user saw, scrubbable in time</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <table class="persona-table">
+        <thead>
+          <tr>
+            <th>Persona</th>
+            <th>What they care about</th>
+            <th>How session replay delivers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="persona-role">👔 C-suite (CTO / CPO / CIO)</span></td>
+            <td>Digital experience as a business outcome: revenue-impacting incidents, customer trust, audit confidence</td>
+            <td>Ground truth of what customers actually experienced during an incident. "How bad was it?" answered with evidence, not estimates, and quantified against plan tiers (Diamond users vs Beta users).</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">📊 VP Eng / Directors</span></td>
+            <td>MTTR, incident postmortems, where engineering time goes</td>
+            <td>Replays turn postmortems from log archaeology into a screening. Cross-referencing frontend replays with backend traces collapses diagnosis time; the "what happened" phase shrinks from days to minutes.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">🧭 Product managers</span></td>
+            <td>Funnel drop-off, feature adoption, UX friction</td>
+            <td>Watch real users abandon checkout at step 2. Rage-click detection and named events (confirm-booking) turn "conversion dipped" into "users can't find the departure date field on mobile."</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">💻 Developers</span></td>
+            <td>Reproducing bugs, error context, exact DOM state</td>
+            <td>No more "steps to reproduce: unknown." Every error links to the replay of the session that threw it, with the exact clicks, network calls, and flag variations active at the moment of failure.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">🧪 QA / Release</span></td>
+            <td>Release validation, regression evidence, flaky repros</td>
+            <td>During a guarded rollout, watch treatment-arm sessions interact with the new variation before ramping. When a regression trips auto-rollback, the replays are the receipts.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">🎧 Support / CX</span></td>
+            <td>Resolving tickets without back-and-forth</td>
+            <td>Look up the customer by email and watch their session instead of asking them to describe it. "I see exactly what happened" replaces three rounds of screenshot requests.</td>
+          </tr>
+        </tbody>
+      </table>
 
+      <div class="two-col">
         <div class="prose">
-          <h3>Why DOM recording wins</h3>
-          <ul>
-            <li><strong>Small payloads</strong> — mutation events are a fraction of the size of video, so recording 24/7 is practical.</li>
-            <li><strong>Privacy at the source</strong> — masking happens during serialization; masked values never leave the browser.</li>
-            <li><strong>Inspectable</strong> — every replay moment is real DOM. Timeline markers (clicks, errors, track events, flag changes) align to exact events, not video timestamps.</li>
-          </ul>
-          <p>The LD Session Replay plugin wraps rrweb and exposes it as <code>window.LDRecord</code> — the same object you use for session properties and manual controls.</p>
-          <div class="doc-links">
-            <a class="doc-link" href="https://www.rrweb.io/" target="_blank" rel="noopener">🎬 rrweb.io</a>
-            <a class="doc-link" href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">⭐ rrweb on GitHub</a>
-            <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 LD Session Replay docs</a>
-          </div>
+          <h3>In this demo app</h3>
+          <p>Every Atlantis 404 links to a replay of Poseidon hitting the failure. During the daily 8am checkout incident, replays show the <strong>"✨ NEW CHECKOUT" badge</strong> on screen while confirms fail, then the badge vanishing once the flag is toggled off. Jordan's abandoned checkouts and the <code>confirm-booking</code> funnel events round out the story.</p>
         </div>
+        <div>
+          <!-- Replace with: <img src="/images/sr-use-cases.png" alt="Session player" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"> -->
+          <div class="img-placeholder" style="margin-top:0">
+            <div class="ph-icon">📸</div>
+            <div class="ph-label">Screenshot placeholder: Session player</div>
+            <div class="ph-hint">A replay mid-playback: timeline markers for clicks, errors, and track events under the viewport</div>
+          </div>
+          <p class="img-caption">The session player: scrub the timeline, jump to error markers</p>
+        </div>
+      </div>
+
+      <div class="win-story">
+        <div class="win-stat">
+          <div class="num">75%</div>
+          <div class="label">faster issue resolution</div>
+        </div>
+        <div class="win-body">
+          <div class="eyebrow-light">Customer win story</div>
+          <h3>Blue Cross of Idaho</h3>
+          <p>The not-for-profit health insurer runs LaunchDarkly session replay and full-stack observability on top of its existing OpenTelemetry setup. No new agents, no new pipelines. Engineers see the exact clicks where members hit problems in the portal, cross-reference them with backend logs, and resolve issues in minutes instead of days: a 75% reduction in resolution time.</p>
+        </div>
+        <a class="btn-white" href="https://launchdarkly.com/case-studies/blue-cross-of-idaho/" target="_blank" rel="noopener">Read the case study →</a>
       </div>
     </div>
   </section>
@@ -394,39 +496,70 @@
       <div class="section-header">
         <div class="eyebrow">Deep dive</div>
         <h2>How Toggle Travel uses it</h2>
-        <p>Expand each topic — real configuration and code from this app, with the LD docs to go deeper.</p>
+        <p>Expand each topic for real configuration and code from this app, with the LD docs to go deeper.</p>
       </div>
 
       <div style="max-width:860px;margin:40px auto 0">
 
-        <!-- USE CASES -->
+        <!-- HOW IT WORKS -->
         <details class="accordion" open>
           <summary>
-            <div class="acc-icon">🎯</div>
+            <div class="acc-icon">🎬</div>
             <div class="acc-title">
-              <strong>Use cases</strong>
-              <span>Why you'd watch a replay in the first place</span>
+              <strong>How session replay works</strong>
+              <span>DOM recording, not video, and the open-source engine underneath: rrweb</span>
             </div>
             <div class="acc-chevron">▼</div>
           </summary>
           <div class="acc-body">
             <div class="prose">
-              <h3>Error forensics</h3>
-              <p>An error report tells you <em>what</em> broke; the replay shows <em>how the user got there</em>. Every Atlantis 404 in this app has a linked session — you can watch Poseidon fill the form, click Confirm &amp; Pay, and hit the red banner.</p>
-              <h3>Incident reconstruction</h3>
-              <p>During the daily 8am checkout incident (the <code>new-checkout-flow</code> flag), replays show the "✨ NEW CHECKOUT" badge on screen while confirms fail — visual proof of which code path the user was on. Toggle the flag off and subsequent replays show the badge disappear and checkouts recover.</p>
-              <h3>UX friction &amp; funnels</h3>
-              <p>Rage clicks, dead clicks, and abandoned checkouts (Jordan's specialty) surface in the session list. Pair with the <code>confirm-booking</code> event to separate "never tried" from "tried and failed."</p>
-              <h3>Support &amp; release validation</h3>
-              <p>Look up any user by email and watch their exact session instead of asking them to describe it. During a guarded rollout, watch treatment-arm sessions interact with the new variation before ramping.</p>
+              <p>Session Replay records the browser's <strong>DOM</strong>: an initial snapshot of the page, then a stream of incremental mutations as nodes are added, text changes, inputs are typed, the mouse moves, and pages navigate. The LaunchDarkly player reconstructs the session from those events, so you can scrub through a user's visit like a timeline.</p>
+              <p>Because it's <strong>events, not pixels</strong>, recordings are lightweight, sensitive fields can be masked <em>at capture time</em> (the real value never leaves the browser), and every moment is inspectable. You can pause a replay and see exactly which elements were on screen.</p>
+              <p>The recording engine is <strong>rrweb</strong> ("record and replay the web"), the open-source standard for DOM recording. The LD plugin wraps rrweb and exposes it as <code>window.LDRecord</code>, the same object you use for session properties and manual controls.</p>
             </div>
-            <!-- Replace with: <img src="/images/sr-use-cases.png" ...> -->
-            <div class="img-placeholder">
-              <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder — Session player</div>
-              <div class="ph-hint">A replay mid-playback: timeline markers for clicks, errors, and track events under the viewport</div>
+            <div class="flow-diagram" style="margin:20px 0">
+              <div class="flow-step">
+                <div class="flow-num flow-num--blue">1</div>
+                <div class="flow-text">
+                  <strong>Full DOM snapshot</strong>
+                  <span>On session start, rrweb serializes the entire document (elements, styles, images) into a JSON snapshot</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--blue">2</div>
+                <div class="flow-text">
+                  <strong>Incremental mutations</strong>
+                  <span>A MutationObserver + input/scroll/mouse listeners emit tiny diff events for every change after that</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--purple">3</div>
+                <div class="flow-text">
+                  <strong>Chunked upload</strong>
+                  <span>The LD plugin batches events and ships them to LD's session ingest endpoint, tagged with your LD context</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--green">4</div>
+                <div class="flow-text">
+                  <strong>Reconstruction in the player</strong>
+                  <span>The LD UI replays snapshot + mutations in a sandboxed iframe: a faithful rebuild of what the user saw, scrubbable in time</span>
+                </div>
+              </div>
             </div>
-            <p class="img-caption">The session player — scrub the timeline, jump to error markers</p>
+            <div class="prose">
+              <h3>Why DOM recording wins</h3>
+              <ul>
+                <li><strong>Small payloads.</strong> Mutation events are a fraction of the size of video, so recording 24/7 is practical.</li>
+                <li><strong>Privacy at the source.</strong> Masking happens during serialization; masked values never leave the browser.</li>
+                <li><strong>Inspectable.</strong> Every replay moment is real DOM. Timeline markers (clicks, errors, track events, flag changes) align to exact events, not video timestamps.</li>
+              </ul>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://www.rrweb.io/" target="_blank" rel="noopener">🎬 rrweb.io</a>
+              <a class="doc-link" href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">⭐ rrweb on GitHub</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 LD Session Replay docs</a>
+            </div>
           </div>
         </details>
 
@@ -436,13 +569,13 @@
             <div class="acc-icon">⚡</div>
             <div class="acc-title">
               <strong>Initial setup</strong>
-              <span>Two plugins on the LD client — that's the whole install</span>
+              <span>Two plugins on the LD client. That's the whole install.</span>
             </div>
             <div class="acc-chevron">▼</div>
           </summary>
           <div class="acc-body">
             <div class="prose">
-              <p>Session Replay ships as a <strong>plugin to the LaunchDarkly JavaScript SDK</strong> — no separate agent, no snippet service. Toggle Travel loads three scripts and initializes once in <code>public/js/flags.js</code>:</p>
+              <p>Session Replay ships as a <strong>plugin to the LaunchDarkly JavaScript SDK</strong>. No separate agent, no snippet service. Toggle Travel loads three scripts and initializes once in <code>public/js/flags.js</code>:</p>
             </div>
             <div class="code-block">
 <span class="code-comment">&lt;!-- load order matters: plugins before flags.js --&gt;</span><br>
@@ -450,7 +583,7 @@
 <span class="code-comment">&lt;script src="/js/ldclient.min.js"&gt;&lt;/script&gt;</span><br>
 <span class="code-comment">&lt;script src="/js/ldsessionreplay.min.js"&gt;&lt;/script&gt;</span><br>
 <br>
-<span class="code-comment">// public/js/flags.js — real code from this app</span><br>
+<span class="code-comment">// public/js/flags.js (real code from this app)</span><br>
 <span class="code-key">const</span> plugins = [];<br>
 plugins.<span class="code-fn">push</span>(<span class="code-key">new</span> Observability.<span class="code-fn">default</span>({ <span class="code-key">tracingOrigins</span>: <span class="code-str">true</span>, <span class="code-key">networkRecording</span>: { <span class="code-key">enabled</span>: <span class="code-str">true</span> } }));<br>
 plugins.<span class="code-fn">push</span>(<span class="code-key">new</span> SessionReplay.<span class="code-fn">default</span>({ <span class="code-key">privacySetting</span>: <span class="code-str">'none'</span>, <span class="code-key">inlineStylesheet</span>: <span class="code-str">true</span>, <span class="code-key">inlineImages</span>: <span class="code-str">true</span> }));<br>
@@ -458,7 +591,7 @@ plugins.<span class="code-fn">push</span>(<span class="code-key">new</span> Sess
 ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, context, { plugins });
             </div>
             <div class="prose">
-              <p>The client-side ID is served to the browser from <code>/api/config</code> (set via the <code>LD_CLIENT_SIDE_ID</code> env var) — recording starts automatically once the client initializes. Every page of this app does this via the shared nav.</p>
+              <p>The client-side ID is served to the browser from <code>/api/config</code> (set via the <code>LD_CLIENT_SIDE_ID</code> env var), and recording starts automatically once the client initializes. Every page of this app does this via the shared nav.</p>
             </div>
             <div class="doc-links">
               <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session Replay configuration</a>
@@ -467,10 +600,59 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <!-- Replace with: <img src="/images/sr-setup.png" ...> -->
             <div class="img-placeholder">
               <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder — First sessions arriving</div>
-              <div class="ph-hint">Sessions list minutes after enabling the plugin — the moment the integration comes alive</div>
+              <div class="ph-label">Screenshot placeholder: First sessions arriving</div>
+              <div class="ph-hint">Sessions list minutes after enabling the plugin: the moment the integration comes alive</div>
             </div>
             <p class="img-caption">Sessions begin appearing within minutes of adding the plugin</p>
+          </div>
+        </details>
+
+        <!-- SESSION LIFECYCLE -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">⏱️</div>
+            <div class="acc-title">
+              <strong>Session lifecycle: start, end, and control</strong>
+              <span>What counts as one session, and the knobs you have over recording</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <h3>When a session starts</h3>
+              <p>Recording begins <strong>automatically when the LD client initializes</strong> with the Session Replay plugin. In this app that's every page load via the shared nav (<code>LDFlags.init()</code>). No user action, no separate start call. If you'd rather decide yourself, the plugin supports a manual-start mode and <code>LDRecord.start()</code>.</p>
+              <h3>What one session includes</h3>
+              <p>A session <strong>spans page navigations</strong>. Browse the home page, run a search, open a destination, and book: that whole journey is one replay, one timeline. The load-gen personas prove it, walking multiple pages in a single recording.</p>
+              <h3>When it ends</h3>
+              <p>Sessions end after a period of <strong>user inactivity</strong> or when the tab closes; the exact windows are in the configuration docs. One nuance from this app: calling <code>ldClient.identify()</code> with a new context tears down the current replay and starts a fresh one, which is why the load gen sets persona identity <em>before</em> first page load instead of re-identifying mid-session.</p>
+              <h3>How to control it</h3>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// Manual controls on window.LDRecord</span><br>
+<span class="code-fn">LDRecord</span>.<span class="code-fn">getRecordingState</span>();&nbsp;&nbsp;<span class="code-comment">// 'Recording' | 'NotRecording'</span><br>
+<span class="code-fn">LDRecord</span>.<span class="code-fn">start</span>();&nbsp;<span class="code-comment">// begin/resume recording (or use the plugin's manual-start mode)</span><br>
+<span class="code-fn">LDRecord</span>.<span class="code-fn">stop</span>();&nbsp;&nbsp;<span class="code-comment">// stop recording (also cancels in-flight uploads, use with care)</span><br>
+<br>
+<span class="code-comment">// This app flushes instead of stopping (scripts/playwright-load.js):</span><br>
+<span class="code-key">await</span> ldClient.<span class="code-fn">flush</span>();&nbsp;&nbsp;<span class="code-comment">// push replay data before the tab closes</span>
+            </div>
+            <div class="callout callout--warn">
+              <div class="callout-icon">⚠️</div>
+              <div class="callout-body">
+                <strong>Lesson from the load generator</strong>
+                <p>Headless browsers skip the normal page-unload path, so replay data buffered in the browser can be lost when the tab closes instantly. The load gen calls flush() and waits before closing, and never calls stop(), because stop() cancels uploads still in flight.</p>
+              </div>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session lifecycle &amp; configuration</a>
+            </div>
+            <!-- Replace with: <img src="/images/sr-lifecycle.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder: Session duration &amp; active time</div>
+              <div class="ph-hint">A session's detail header showing total length vs active time, across multiple page views</div>
+            </div>
+            <p class="img-caption">One session, multiple pages: total duration vs active interaction time</p>
           </div>
         </details>
 
@@ -480,21 +662,21 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="acc-icon">🎭</div>
             <div class="acc-title">
               <strong>Masking &amp; privacy</strong>
-              <span>Sensitive data is masked in the browser — it never reaches LaunchDarkly</span>
+              <span>Sensitive data is masked in the browser, before it ever reaches LaunchDarkly</span>
             </div>
             <div class="acc-chevron">▼</div>
           </summary>
           <div class="acc-body">
             <div class="prose">
-              <p>Masking happens <strong>at record time, in the user's browser</strong> — masked text is replaced during rrweb's DOM serialization, so the real value is never transmitted. Three privacy modes:</p>
+              <p>Masking happens <strong>at record time, in the user's browser</strong>. Masked text is replaced during rrweb's DOM serialization, so the real value is never transmitted. Three privacy modes:</p>
               <ul>
-                <li><strong><code>strict</code></strong> (default) — masks <em>all</em> text and images. Safest, and the out-of-the-box behavior.</li>
-                <li><strong><code>default</code></strong> — masks inputs and text matching common PII patterns (emails, SSNs, card numbers), leaves general content readable.</li>
-                <li><strong><code>none</code></strong> — records everything. What this demo app uses, so replays are fully readable on stage.</li>
+                <li><strong><code>strict</code></strong> (the default) masks <em>all</em> text and images. Safest, and the out-of-the-box behavior.</li>
+                <li><strong><code>default</code></strong> masks inputs and text matching common PII patterns (emails, SSNs, card numbers) and leaves general content readable.</li>
+                <li><strong><code>none</code></strong> records everything. What this demo app uses, so replays are fully readable on stage.</li>
               </ul>
             </div>
             <div class="code-block">
-<span class="code-comment">// flags.js — this app deliberately disables masking for demo readability:</span><br>
+<span class="code-comment">// flags.js: this app deliberately disables masking for demo readability</span><br>
 <span class="code-comment">// "LD defaults to privacySetting 'strict' (masks all text + images). Use 'none' for</span><br>
 <span class="code-comment">//  readable demo replays; switch to 'default' in production to mask PII inputs/patterns."</span><br>
 <span class="code-key">new</span> SessionReplay.<span class="code-fn">default</span>({<br>
@@ -504,8 +686,8 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="callout callout--warn">
               <div class="callout-icon">⚠️</div>
               <div class="callout-body">
-                <strong>Demo setting — not a production recommendation</strong>
-                <p>Real applications should run 'strict' or 'default'. You can also exclude specific elements from recording entirely via selector-based blocking — see the privacy section of the configuration docs.</p>
+                <strong>Demo setting, not a production recommendation</strong>
+                <p>Real applications should run 'strict' or 'default'. You can also exclude specific elements from recording entirely via selector-based blocking; see the privacy section of the configuration docs.</p>
               </div>
             </div>
             <div class="doc-links">
@@ -514,7 +696,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <!-- Replace with: <img src="/images/sr-masking.png" ...> -->
             <div class="img-placeholder">
               <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder — Masked vs unmasked replay</div>
+              <div class="ph-label">Screenshot placeholder: Masked vs unmasked replay</div>
               <div class="ph-hint">Side-by-side of the booking form under privacySetting 'strict' (asterisked) and 'none' (readable)</div>
             </div>
             <p class="img-caption">The same booking form recorded under different privacy settings</p>
@@ -526,7 +708,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
           <summary>
             <div class="acc-icon">🏷️</div>
             <div class="acc-title">
-              <strong>Customization — metadata on sessions</strong>
+              <strong>Customization: metadata on sessions</strong>
               <span>Session properties, identity, and custom timeline events</span>
             </div>
             <div class="acc-chevron">▼</div>
@@ -534,22 +716,22 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
           <div class="acc-body">
             <div class="prose">
               <h3>Session properties</h3>
-              <p>Attach searchable key/value properties to the active recording with <code>LDRecord.addSessionProperties()</code>. Toggle Travel stamps every session with the user's <strong>plan</strong> — signed-in users report their nav tier, load-gen personas carry assigned plans (Alex → Gold, Jordan → Diamond, Sam → Beta…), and anonymous visitors get a stable hash-derived tier.</p>
+              <p>Attach searchable key/value properties to the active recording with <code>LDRecord.addSessionProperties()</code>. Toggle Travel stamps every session with the user's <strong>plan</strong>: signed-in users report their nav tier, load-gen personas carry assigned plans (Alex is Gold, Jordan Diamond, Sam Beta), and anonymous visitors get a stable hash-derived tier.</p>
             </div>
             <div class="code-block">
-<span class="code-comment">// flags.js — runs right after the LD client initializes</span><br>
+<span class="code-comment">// flags.js: runs right after the LD client initializes</span><br>
 <span class="code-fn">LDRecord</span>.<span class="code-fn">addSessionProperties</span>({<br>
 &nbsp;&nbsp;<span class="code-key">plan</span>: <span class="code-str">'Gold'</span>,&nbsp;&nbsp;<span class="code-comment">// Beta | Silver | Gold | Platinum | Diamond</span><br>
 });
             </div>
             <div class="prose">
               <h3>Identity</h3>
-              <p>Sessions inherit the LD context — <code>ldClient.identify()</code> on sign-in means replays are findable by the user's email, and the same key ties the session to flag evaluations and server traces.</p>
+              <p>Sessions inherit the LD context. <code>ldClient.identify()</code> on sign-in means replays are findable by the user's email, and the same key ties the session to flag evaluations and server traces.</p>
               <h3>Custom timeline events</h3>
-              <p>Every <code>ldClient.track()</code> call lands on the replay timeline as a named marker. This app fires <code>confirm-booking</code> when Confirm &amp; Pay is clicked and <code>booking-error</code> when a booking fails — so the checkout funnel is visible inside every replay.</p>
+              <p>Every <code>ldClient.track()</code> call lands on the replay timeline as a named marker. This app fires <code>confirm-booking</code> when Confirm &amp; Pay is clicked and <code>booking-error</code> when a booking fails, so the checkout funnel is visible inside every replay.</p>
             </div>
             <div class="code-block">
-<span class="code-comment">// booking.html — semantic events that appear on the session timeline</span><br>
+<span class="code-comment">// booking.html: semantic events that appear on the session timeline</span><br>
 <span class="code-fn">LDFlags</span>.<span class="code-fn">track</span>(<span class="code-str">'confirm-booking'</span>, { <span class="code-key">destination_id</span>, <span class="code-key">travelers</span> });<br>
 <span class="code-fn">LDFlags</span>.<span class="code-fn">track</span>(<span class="code-str">'booking-error'</span>,&nbsp;&nbsp;&nbsp;{ <span class="code-key">destination_id</span>, <span class="code-key">http_status</span> });
             </div>
@@ -560,7 +742,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <!-- Replace with: <img src="/images/sr-metadata.png" ...> -->
             <div class="img-placeholder">
               <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder — Session properties panel</div>
+              <div class="ph-label">Screenshot placeholder: Session properties panel</div>
               <div class="ph-hint">A session's detail pane showing plan: Gold, persona, personaEmail, and the track-event markers on the timeline</div>
             </div>
             <p class="img-caption">Custom properties and track events attached to a recorded session</p>
@@ -573,7 +755,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="acc-icon">🔍</div>
             <div class="acc-title">
               <strong>Searching sessions</strong>
-              <span>Find the exact replay you need — by user, property, event, or behavior</span>
+              <span>Find the exact replay you need by user, property, event, or behavior</span>
             </div>
             <div class="acc-chevron">▼</div>
           </summary>
@@ -581,19 +763,19 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <div class="prose">
               <p>The Sessions view supports attribute filters that combine with AND/OR. The searches this demo leans on:</p>
               <ul>
-                <li><strong>By user</strong> — <code>identifier = poseidon@demo.toggletravel.io</code> → every session from one persona</li>
-                <li><strong>By session property</strong> — <code>plan = Diamond</code> → only your highest-tier users (the property from the customization section)</li>
-                <li><strong>By custom event</strong> — sessions containing a <code>confirm-booking</code> track event → everyone who attempted checkout, by name, no CSS selectors required</li>
-                <li><strong>By click</strong> — <code>clickSelector = #confirm-btn</code> → raw click matching when you haven't instrumented an event yet</li>
-                <li><strong>By outcome</strong> — <code>has_errors = true</code>, or rage-click detection → sessions worth watching first</li>
+                <li><strong>By user:</strong> <code>identifier = poseidon@demo.toggletravel.io</code> → every session from one persona</li>
+                <li><strong>By session property:</strong> <code>plan = Diamond</code> → only your highest-tier users (the property from the customization section)</li>
+                <li><strong>By custom event:</strong> sessions containing a <code>confirm-booking</code> track event → everyone who attempted checkout, by name, no CSS selectors required</li>
+                <li><strong>By click:</strong> <code>clickSelector = #confirm-btn</code> → raw click matching when you haven't instrumented an event yet</li>
+                <li><strong>By outcome:</strong> <code>has_errors = true</code>, or rage-click detection → sessions worth watching first</li>
               </ul>
-              <p>The same query language powers errors, logs, and traces — one syntax across the Observability platform.</p>
+              <p>The same query language powers errors, logs, and traces: one syntax across the Observability platform.</p>
             </div>
             <div class="callout callout--code">
               <div class="callout-icon">💡</div>
               <div class="callout-body">
                 <strong>Semantic events beat selector searches</strong>
-                <p>clickTextContent can lie — this app's Confirm button reads "Processing…" by the time the click is captured, because the handler swaps the label first. Named track events like confirm-booking are immune to UI copy and DOM refactors.</p>
+                <p>clickTextContent can lie. This app's Confirm button reads "Processing…" by the time the click is captured, because the handler swaps the label first. Named track events like confirm-booking are immune to UI copy and DOM refactors.</p>
               </div>
             </div>
             <div class="doc-links">
@@ -603,7 +785,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
             <!-- Replace with: <img src="/images/sr-search.png" ...> -->
             <div class="img-placeholder">
               <div class="ph-icon">📸</div>
-              <div class="ph-label">Screenshot placeholder — Filtered session search</div>
+              <div class="ph-label">Screenshot placeholder: Filtered session search</div>
               <div class="ph-hint">Sessions view filtered to plan = Diamond AND has_errors = true, showing the query bar</div>
             </div>
             <p class="img-caption">Combining a session property with an error filter to triage high-value users</p>
@@ -620,7 +802,7 @@ ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, contex
       <div class="try-it-banner">
         <div>
           <h3>Generate a replay right now</h3>
-          <p>Run the load generator — every persona session is recorded. Then open the LD Sessions view and watch Poseidon fail to book Atlantis, complete with the error marker on the timeline.</p>
+          <p>Run the load generator; every persona session is recorded. Then open the LD Sessions view and watch Poseidon fail to book Atlantis, complete with the error marker on the timeline.</p>
         </div>
         <a href="/demo.html" class="btn-white">Open Load Gen →</a>
       </div>
