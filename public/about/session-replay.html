@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session Replay — About Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .page-hero {
+      background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%);
+      color: #fff;
+      padding: 64px 24px 56px;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      font-weight: 500;
+      opacity: .7;
+      margin-bottom: 24px;
+    }
+    .breadcrumb a { color: #fff; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb-sep { opacity: .5; }
+    .page-hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 14px; line-height: 1.2; }
+    .page-hero p { font-size: 1.05rem; opacity: .85; max-width: 640px; line-height: 1.7; }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .content-section { padding: 56px 0; }
+    .content-section + .content-section { border-top: 1px solid var(--border); padding-top: 56px; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+    .prose h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 16px; }
+    .prose h3 { font-size: 1.1rem; font-weight: 700; margin: 28px 0 10px; }
+    .prose p { color: var(--text-muted); line-height: 1.75; margin-bottom: 14px; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose strong { color: var(--text); }
+    .prose ul { color: var(--text-muted); line-height: 1.75; margin: 0 0 14px 20px; }
+    .prose li { margin-bottom: 6px; }
+    .prose a { color: var(--brand-primary); font-weight: 600; }
+
+    .callout {
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 24px 0;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.3rem; flex-shrink: 0; line-height: 1.4; }
+    .callout-body { flex: 1; }
+    .callout-body strong { display: block; margin-bottom: 4px; font-size: .95rem; }
+    .callout-body p { font-size: .88rem; line-height: 1.65; margin: 0; }
+    .callout--ld { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .callout--ld .callout-body strong { color: #1e40af; }
+    .callout--ld .callout-body p { color: #1e3a8a; }
+    .callout--code { background: var(--surface-2); border: 1px solid var(--border); }
+    .callout--code .callout-body strong { color: var(--text); }
+    .callout--code .callout-body p { color: var(--text-muted); }
+    .callout--warn { background: #fffbeb; border: 1px solid #fde68a; }
+    .callout--warn .callout-body strong { color: #92400e; }
+    .callout--warn .callout-body p { color: #78350f; }
+
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      font-size: .8rem;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      line-height: 1.65;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    .code-comment { color: #64748b; }
+    .code-key { color: #7dd3fc; }
+    .code-str { color: #86efac; }
+    .code-fn { color: #fbbf24; }
+
+    .doc-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 16px 0 4px;
+    }
+    .doc-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: .8rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all var(--transition);
+    }
+    .doc-link:hover { background: #dbeafe; text-decoration: none; }
+
+    /* Screenshot placeholder — swap the inner div for an <img> when ready */
+    .img-placeholder {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--text-light);
+      text-align: center;
+      padding: 24px;
+      margin: 20px 0 6px;
+    }
+    .img-placeholder .ph-icon { font-size: 2rem; opacity: .5; }
+    .img-placeholder .ph-label { font-size: .85rem; font-weight: 700; color: var(--text-muted); }
+    .img-placeholder .ph-hint { font-size: .75rem; }
+    .img-caption { font-size: .75rem; color: var(--text-light); text-align: center; margin-bottom: 20px; }
+
+    /* Accordion */
+    .accordion {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin-bottom: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .accordion summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 24px;
+      user-select: none;
+    }
+    .accordion summary::-webkit-details-marker { display: none; }
+    .accordion summary:hover { background: var(--surface-2); }
+    .acc-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      background: #eef2ff;
+    }
+    .acc-title { flex: 1; }
+    .acc-title strong { display: block; font-size: 1.02rem; font-weight: 700; }
+    .acc-title span { font-size: .82rem; color: var(--text-muted); }
+    .acc-chevron {
+      font-size: .9rem;
+      color: var(--text-light);
+      transition: transform var(--transition);
+      flex-shrink: 0;
+    }
+    .accordion[open] .acc-chevron { transform: rotate(180deg); }
+    .accordion[open] summary { border-bottom: 1px solid var(--border); }
+    .acc-body { padding: 24px; }
+    .acc-body .prose h3:first-child { margin-top: 0; }
+
+    .try-it-banner {
+      background: linear-gradient(135deg, #405BFF 0%, #6366f1 100%);
+      border-radius: var(--radius);
+      padding: 32px 36px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .try-it-banner h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+    .try-it-banner p { opacity: .85; font-size: .9rem; margin: 0; }
+    .try-it-banner .btn-white {
+      background: #fff;
+      color: #405BFF;
+      font-weight: 700;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: .9rem;
+      white-space: nowrap;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .try-it-banner .btn-white:hover { opacity: .9; text-decoration: none; }
+
+    .flow-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      position: relative;
+    }
+    .flow-step + .flow-step { margin-top: 20px; }
+    .flow-step + .flow-step::before {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: -20px;
+      width: 2px;
+      height: 20px;
+      background: var(--border);
+    }
+    .flow-num {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .flow-num--blue { background: #dbeafe; color: #1d4ed8; }
+    .flow-num--purple { background: #ede9fe; color: #6d28d9; }
+    .flow-num--green { background: #d1fae5; color: #065f46; }
+    .flow-text strong { display: block; font-size: .9rem; font-weight: 700; margin-bottom: 3px; }
+    .flow-text span { font-size: .82rem; color: var(--text-muted); line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/ai-planner">AI Planner</a></li>
+        <li><a href="/about.html">About</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb">
+        <a href="/about.html">About</a>
+        <span class="breadcrumb-sep">/</span>
+        <span>Session Replay</span>
+      </div>
+      <h1>📹 Session Replay —<br>every session, reconstructed</h1>
+      <p>Watch exactly what your users experienced — every click, scroll, form fill, error banner, and feature-flag change — replayed as a pixel-faithful reconstruction of the real session. Not a video: a recording of the DOM itself.</p>
+      <div class="tag-row">
+        <span class="tag">🔵 LD Session Replay plugin</span>
+        <span class="tag">🎬 Built on rrweb</span>
+        <span class="tag">🔵 LD Observability Browser SDK</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section class="content-section">
+    <div class="container">
+      <div class="two-col">
+        <div class="prose">
+          <h2>What session replay is</h2>
+          <p>Session Replay records the browser's <strong>DOM</strong> — an initial snapshot of the page, then a stream of incremental mutations: nodes added, text changed, inputs typed, mouse moved, pages navigated. The LaunchDarkly player reconstructs the session from those events, so you can scrub through a user's visit like a timeline.</p>
+          <p>Because it's <strong>events, not pixels</strong>, recordings are lightweight, sensitive fields can be masked <em>at capture time</em> (the real value never leaves the browser), and every moment is inspectable — you can pause a replay and see exactly which elements were on screen.</p>
+          <p>In Toggle Travel, every visit — real users and the 24/7 load-gen personas alike — is recorded and linked to the same LaunchDarkly context used for flag evaluations. That's the superpower: <strong>replays, errors, traces, logs, and flags all share one identity.</strong></p>
+
+          <div class="callout callout--ld">
+            <div class="callout-icon">🔵</div>
+            <div class="callout-body">
+              <strong>One context, five signals</strong>
+              <p>When Poseidon's Atlantis booking fails, you can jump from the error → the session replay of the failure → the flag evaluations active in that session → the server trace of the 404 — all keyed to poseidon@demo.toggletravel.io.</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <!-- Replace this placeholder with a real screenshot:
+               <img src="/images/sr-overview.png" alt="LD Sessions list" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"> -->
+          <div class="img-placeholder">
+            <div class="ph-icon">📸</div>
+            <div class="ph-label">Screenshot placeholder — Sessions overview</div>
+            <div class="ph-hint">LD UI → Telemetry → Sessions: the session list with identifiers, duration, device, and error badges</div>
+          </div>
+          <p class="img-caption">The LD Observability Sessions view — one row per recorded visit</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RRWEB -->
+  <section class="content-section" style="background:var(--surface-2)">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Under the hood</div>
+        <h2>Built on rrweb</h2>
+        <p>LaunchDarkly Session Replay is built on <strong>rrweb</strong> ("record and replay the web") — the open-source standard for DOM recording.</p>
+      </div>
+
+      <div class="two-col" style="margin-top:40px">
+        <div>
+          <div class="flow-diagram">
+            <div class="flow-step">
+              <div class="flow-num flow-num--blue">1</div>
+              <div class="flow-text">
+                <strong>Full DOM snapshot</strong>
+                <span>On session start, rrweb serializes the entire document — elements, styles, images — into a JSON snapshot</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--blue">2</div>
+              <div class="flow-text">
+                <strong>Incremental mutations</strong>
+                <span>A MutationObserver + input/scroll/mouse listeners emit tiny diff events for every change after that</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--purple">3</div>
+              <div class="flow-text">
+                <strong>Chunked upload</strong>
+                <span>The LD plugin batches events and ships them to LD's session ingest endpoint, tagged with your LD context</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num flow-num--green">4</div>
+              <div class="flow-text">
+                <strong>Reconstruction in the player</strong>
+                <span>The LD UI replays snapshot + mutations in a sandboxed iframe — a faithful rebuild of what the user saw, scrubbable in time</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h3>Why DOM recording wins</h3>
+          <ul>
+            <li><strong>Small payloads</strong> — mutation events are a fraction of the size of video, so recording 24/7 is practical.</li>
+            <li><strong>Privacy at the source</strong> — masking happens during serialization; masked values never leave the browser.</li>
+            <li><strong>Inspectable</strong> — every replay moment is real DOM. Timeline markers (clicks, errors, track events, flag changes) align to exact events, not video timestamps.</li>
+          </ul>
+          <p>The LD Session Replay plugin wraps rrweb and exposes it as <code>window.LDRecord</code> — the same object you use for session properties and manual controls.</p>
+          <div class="doc-links">
+            <a class="doc-link" href="https://www.rrweb.io/" target="_blank" rel="noopener">🎬 rrweb.io</a>
+            <a class="doc-link" href="https://github.com/rrweb-io/rrweb" target="_blank" rel="noopener">⭐ rrweb on GitHub</a>
+            <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 LD Session Replay docs</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEEP DIVE ACCORDIONS -->
+  <section class="content-section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Deep dive</div>
+        <h2>How Toggle Travel uses it</h2>
+        <p>Expand each topic — real configuration and code from this app, with the LD docs to go deeper.</p>
+      </div>
+
+      <div style="max-width:860px;margin:40px auto 0">
+
+        <!-- USE CASES -->
+        <details class="accordion" open>
+          <summary>
+            <div class="acc-icon">🎯</div>
+            <div class="acc-title">
+              <strong>Use cases</strong>
+              <span>Why you'd watch a replay in the first place</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <h3>Error forensics</h3>
+              <p>An error report tells you <em>what</em> broke; the replay shows <em>how the user got there</em>. Every Atlantis 404 in this app has a linked session — you can watch Poseidon fill the form, click Confirm &amp; Pay, and hit the red banner.</p>
+              <h3>Incident reconstruction</h3>
+              <p>During the daily 8am checkout incident (the <code>new-checkout-flow</code> flag), replays show the "✨ NEW CHECKOUT" badge on screen while confirms fail — visual proof of which code path the user was on. Toggle the flag off and subsequent replays show the badge disappear and checkouts recover.</p>
+              <h3>UX friction &amp; funnels</h3>
+              <p>Rage clicks, dead clicks, and abandoned checkouts (Jordan's specialty) surface in the session list. Pair with the <code>confirm-booking</code> event to separate "never tried" from "tried and failed."</p>
+              <h3>Support &amp; release validation</h3>
+              <p>Look up any user by email and watch their exact session instead of asking them to describe it. During a guarded rollout, watch treatment-arm sessions interact with the new variation before ramping.</p>
+            </div>
+            <!-- Replace with: <img src="/images/sr-use-cases.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder — Session player</div>
+              <div class="ph-hint">A replay mid-playback: timeline markers for clicks, errors, and track events under the viewport</div>
+            </div>
+            <p class="img-caption">The session player — scrub the timeline, jump to error markers</p>
+          </div>
+        </details>
+
+        <!-- INITIAL SETUP -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">⚡</div>
+            <div class="acc-title">
+              <strong>Initial setup</strong>
+              <span>Two plugins on the LD client — that's the whole install</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>Session Replay ships as a <strong>plugin to the LaunchDarkly JavaScript SDK</strong> — no separate agent, no snippet service. Toggle Travel loads three scripts and initializes once in <code>public/js/flags.js</code>:</p>
+            </div>
+            <div class="code-block">
+<span class="code-comment">&lt;!-- load order matters: plugins before flags.js --&gt;</span><br>
+<span class="code-comment">&lt;script src="/js/ldobservability.min.js"&gt;&lt;/script&gt;</span><br>
+<span class="code-comment">&lt;script src="/js/ldclient.min.js"&gt;&lt;/script&gt;</span><br>
+<span class="code-comment">&lt;script src="/js/ldsessionreplay.min.js"&gt;&lt;/script&gt;</span><br>
+<br>
+<span class="code-comment">// public/js/flags.js — real code from this app</span><br>
+<span class="code-key">const</span> plugins = [];<br>
+plugins.<span class="code-fn">push</span>(<span class="code-key">new</span> Observability.<span class="code-fn">default</span>({ <span class="code-key">tracingOrigins</span>: <span class="code-str">true</span>, <span class="code-key">networkRecording</span>: { <span class="code-key">enabled</span>: <span class="code-str">true</span> } }));<br>
+plugins.<span class="code-fn">push</span>(<span class="code-key">new</span> SessionReplay.<span class="code-fn">default</span>({ <span class="code-key">privacySetting</span>: <span class="code-str">'none'</span>, <span class="code-key">inlineStylesheet</span>: <span class="code-str">true</span>, <span class="code-key">inlineImages</span>: <span class="code-str">true</span> }));<br>
+<br>
+ldClient = LDClient.<span class="code-fn">initialize</span>(clientSideId, context, { plugins });
+            </div>
+            <div class="prose">
+              <p>The client-side ID is served to the browser from <code>/api/config</code> (set via the <code>LD_CLIENT_SIDE_ID</code> env var) — recording starts automatically once the client initializes. Every page of this app does this via the shared nav.</p>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Session Replay configuration</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/observability" target="_blank" rel="noopener">📘 Observability SDKs</a>
+            </div>
+            <!-- Replace with: <img src="/images/sr-setup.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder — First sessions arriving</div>
+              <div class="ph-hint">Sessions list minutes after enabling the plugin — the moment the integration comes alive</div>
+            </div>
+            <p class="img-caption">Sessions begin appearing within minutes of adding the plugin</p>
+          </div>
+        </details>
+
+        <!-- MASKING -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">🎭</div>
+            <div class="acc-title">
+              <strong>Masking &amp; privacy</strong>
+              <span>Sensitive data is masked in the browser — it never reaches LaunchDarkly</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>Masking happens <strong>at record time, in the user's browser</strong> — masked text is replaced during rrweb's DOM serialization, so the real value is never transmitted. Three privacy modes:</p>
+              <ul>
+                <li><strong><code>strict</code></strong> (default) — masks <em>all</em> text and images. Safest, and the out-of-the-box behavior.</li>
+                <li><strong><code>default</code></strong> — masks inputs and text matching common PII patterns (emails, SSNs, card numbers), leaves general content readable.</li>
+                <li><strong><code>none</code></strong> — records everything. What this demo app uses, so replays are fully readable on stage.</li>
+              </ul>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// flags.js — this app deliberately disables masking for demo readability:</span><br>
+<span class="code-comment">// "LD defaults to privacySetting 'strict' (masks all text + images). Use 'none' for</span><br>
+<span class="code-comment">//  readable demo replays; switch to 'default' in production to mask PII inputs/patterns."</span><br>
+<span class="code-key">new</span> SessionReplay.<span class="code-fn">default</span>({<br>
+&nbsp;&nbsp;<span class="code-key">privacySetting</span>: <span class="code-str">'none'</span>,&nbsp;&nbsp;<span class="code-comment">// 'strict' | 'default' | 'none'</span><br>
+});
+            </div>
+            <div class="callout callout--warn">
+              <div class="callout-icon">⚠️</div>
+              <div class="callout-body">
+                <strong>Demo setting — not a production recommendation</strong>
+                <p>Real applications should run 'strict' or 'default'. You can also exclude specific elements from recording entirely via selector-based blocking — see the privacy section of the configuration docs.</p>
+              </div>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Privacy &amp; masking configuration</a>
+            </div>
+            <!-- Replace with: <img src="/images/sr-masking.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder — Masked vs unmasked replay</div>
+              <div class="ph-hint">Side-by-side of the booking form under privacySetting 'strict' (asterisked) and 'none' (readable)</div>
+            </div>
+            <p class="img-caption">The same booking form recorded under different privacy settings</p>
+          </div>
+        </details>
+
+        <!-- CUSTOMIZATION / METADATA -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">🏷️</div>
+            <div class="acc-title">
+              <strong>Customization — metadata on sessions</strong>
+              <span>Session properties, identity, and custom timeline events</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <h3>Session properties</h3>
+              <p>Attach searchable key/value properties to the active recording with <code>LDRecord.addSessionProperties()</code>. Toggle Travel stamps every session with the user's <strong>plan</strong> — signed-in users report their nav tier, load-gen personas carry assigned plans (Alex → Gold, Jordan → Diamond, Sam → Beta…), and anonymous visitors get a stable hash-derived tier.</p>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// flags.js — runs right after the LD client initializes</span><br>
+<span class="code-fn">LDRecord</span>.<span class="code-fn">addSessionProperties</span>({<br>
+&nbsp;&nbsp;<span class="code-key">plan</span>: <span class="code-str">'Gold'</span>,&nbsp;&nbsp;<span class="code-comment">// Beta | Silver | Gold | Platinum | Diamond</span><br>
+});
+            </div>
+            <div class="prose">
+              <h3>Identity</h3>
+              <p>Sessions inherit the LD context — <code>ldClient.identify()</code> on sign-in means replays are findable by the user's email, and the same key ties the session to flag evaluations and server traces.</p>
+              <h3>Custom timeline events</h3>
+              <p>Every <code>ldClient.track()</code> call lands on the replay timeline as a named marker. This app fires <code>confirm-booking</code> when Confirm &amp; Pay is clicked and <code>booking-error</code> when a booking fails — so the checkout funnel is visible inside every replay.</p>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// booking.html — semantic events that appear on the session timeline</span><br>
+<span class="code-fn">LDFlags</span>.<span class="code-fn">track</span>(<span class="code-str">'confirm-booking'</span>, { <span class="code-key">destination_id</span>, <span class="code-key">travelers</span> });<br>
+<span class="code-fn">LDFlags</span>.<span class="code-fn">track</span>(<span class="code-str">'booking-error'</span>,&nbsp;&nbsp;&nbsp;{ <span class="code-key">destination_id</span>, <span class="code-key">http_status</span> });
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/sdk/features/session-replay-config" target="_blank" rel="noopener">📘 Add session properties</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay overview</a>
+            </div>
+            <!-- Replace with: <img src="/images/sr-metadata.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder — Session properties panel</div>
+              <div class="ph-hint">A session's detail pane showing plan: Gold, persona, personaEmail, and the track-event markers on the timeline</div>
+            </div>
+            <p class="img-caption">Custom properties and track events attached to a recorded session</p>
+          </div>
+        </details>
+
+        <!-- SEARCHING -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">🔍</div>
+            <div class="acc-title">
+              <strong>Searching sessions</strong>
+              <span>Find the exact replay you need — by user, property, event, or behavior</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>The Sessions view supports attribute filters that combine with AND/OR. The searches this demo leans on:</p>
+              <ul>
+                <li><strong>By user</strong> — <code>identifier = poseidon@demo.toggletravel.io</code> → every session from one persona</li>
+                <li><strong>By session property</strong> — <code>plan = Diamond</code> → only your highest-tier users (the property from the customization section)</li>
+                <li><strong>By custom event</strong> — sessions containing a <code>confirm-booking</code> track event → everyone who attempted checkout, by name, no CSS selectors required</li>
+                <li><strong>By click</strong> — <code>clickSelector = #confirm-btn</code> → raw click matching when you haven't instrumented an event yet</li>
+                <li><strong>By outcome</strong> — <code>has_errors = true</code>, or rage-click detection → sessions worth watching first</li>
+              </ul>
+              <p>The same query language powers errors, logs, and traces — one syntax across the Observability platform.</p>
+            </div>
+            <div class="callout callout--code">
+              <div class="callout-icon">💡</div>
+              <div class="callout-body">
+                <strong>Semantic events beat selector searches</strong>
+                <p>clickTextContent can lie — this app's Confirm button reads "Processing…" by the time the click is captured, because the handler swaps the label first. Named track events like confirm-booking are immune to UI copy and DOM refactors.</p>
+              </div>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/search" target="_blank" rel="noopener">📘 Search specification</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/session-replay" target="_blank" rel="noopener">📘 Session Replay docs</a>
+            </div>
+            <!-- Replace with: <img src="/images/sr-search.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder — Filtered session search</div>
+              <div class="ph-hint">Sessions view filtered to plan = Diamond AND has_errors = true, showing the query bar</div>
+            </div>
+            <p class="img-caption">Combining a session property with an error filter to triage high-value users</p>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- TRY IT -->
+  <section class="content-section" style="background:var(--surface-2)">
+    <div class="container">
+      <div class="try-it-banner">
+        <div>
+          <h3>Generate a replay right now</h3>
+          <p>Run the load generator — every persona session is recorded. Then open the LD Sessions view and watch Poseidon fail to book Atlantis, complete with the error marker on the timeline.</p>
+        </div>
+        <a href="/demo.html" class="btn-white">Open Load Gen →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="/search.html">Destinations</a></li>
+          <li><a href="/bookings.html">My Trips</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>About</h4>
+        <ul>
+          <li><a href="/about.html">Overview</a></li>
+          <li><a href="/about/errors.html">Errors</a></li>
+          <li><a href="/about/session-replay.html">Session Replay</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel. Built for demos.</span>
+      <span>Powered by LaunchDarkly</span>
+    </div>
+  </footer>
+
+  <script src="/js/ldobservability.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/ldsessionreplay.min.js"></script>
+  <script src="/js/flags.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+</body>
+</html>
