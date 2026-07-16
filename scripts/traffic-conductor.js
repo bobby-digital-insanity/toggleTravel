@@ -11,11 +11,13 @@
  *   2. API tier — cheap fetch() traffic against the public API with a rotating
  *      pool of synthetic identities (x-session-id header). Thousands of server
  *      traces/logs/flag evaluations per day for near-zero resource cost.
- *   3. Incident scheduler — every day at INCIDENT_HOUR_ET (default 8am ET),
- *      turns ON the `new-checkout-flow` flag via the LD REST API ("the deploy"),
- *      which makes ~50% of checkouts fail (see src/routes/bookings.js). Toggle
- *      the flag OFF in LaunchDarkly to recover — or the conductor auto-reverts
- *      after INCIDENT_AUTO_REVERT_MIN as a safety net.
+ *   3. Incident scheduler — every day at INCIDENT_HOUR_ET (default 7am ET),
+ *      starts a GUARDED ROLLOUT on `new-checkout-flow` via the LD REST API
+ *      ("the deploy"): the new checkout ships to 50% of live traffic and fails
+ *      EVERY confirm in that arm (see src/routes/bookings.js). LaunchDarkly
+ *      watches the booking-error metric and auto-rolls-back within minutes; the
+ *      conductor drives a checkout surge so the guard reaches significance fast,
+ *      and force-stops after INCIDENT_AUTO_REVERT_MIN only as a safety net.
  *
  * Requires LD_API_TOKEN (Writer, scoped to the project) for the incident
  * scheduler only — without it, traffic still runs and incidents are skipped.
@@ -28,8 +30,9 @@
  *   TRAFFIC_API_RPM=20              API-tier requests/minute at peak (diurnally scaled)
  *   TRAFFIC_UNIQUE_PCT=70           % of browser flows run as brand-new identities
  *   INCIDENT_ENABLED=true
- *   INCIDENT_HOUR_ET=8              hour (ET, 0-23) the checkout incident starts
- *   INCIDENT_AUTO_REVERT_MIN=60     safety-net auto-revert if nobody toggles the flag
+ *   INCIDENT_HOUR_ET=7              hour (ET, 0-23) the guarded rollout starts
+ *   INCIDENT_MONITOR_WINDOW_MIN=5   guarded-rollout monitoring window per stage
+ *   INCIDENT_AUTO_REVERT_MIN=20     safety-net backstop if the guard never trips
  *   INCIDENT_TEST_DELAY_MIN         (testing) fire the incident N minutes after boot
  *   LD_API_TOKEN / LD_PROJECT_KEY=ToggleTravel / LD_ENV_KEY=launch-darkly / LD_API_BASE
  */
@@ -48,8 +51,9 @@ const API_RPM        = num(process.env.TRAFFIC_API_RPM, 20);
 const UNIQUE_PCT     = num(process.env.TRAFFIC_UNIQUE_PCT, 70);
 
 const INCIDENT_ENABLED   = (process.env.INCIDENT_ENABLED ?? 'true') !== 'false';
-const INCIDENT_HOUR_ET   = num(process.env.INCIDENT_HOUR_ET, 8);
-const AUTO_REVERT_MIN    = num(process.env.INCIDENT_AUTO_REVERT_MIN, 60);
+const INCIDENT_HOUR_ET   = num(process.env.INCIDENT_HOUR_ET, 7);
+const AUTO_REVERT_MIN    = num(process.env.INCIDENT_AUTO_REVERT_MIN, 20);
+const MONITOR_WINDOW_MIN = num(process.env.INCIDENT_MONITOR_WINDOW_MIN, 5);
 const TEST_DELAY_MIN     = process.env.INCIDENT_TEST_DELAY_MIN ? num(process.env.INCIDENT_TEST_DELAY_MIN, 1) : null;
 
 const LD_BASE     = process.env.LD_API_BASE || 'https://app.launchdarkly.com';
@@ -57,6 +61,10 @@ const LD_TOKEN    = process.env.LD_API_TOKEN || null;
 const PROJECT_KEY = process.env.LD_PROJECT_KEY || 'ToggleTravel';
 const ENV_KEY     = process.env.LD_ENV_KEY || 'launch-darkly';
 const FLAG_KEY    = 'new-checkout-flow';
+const METRIC_KEY  = 'booking-error';
+const GUARDED_ALLOCATION = 50000; // 50% — the guarded-rollout max; the rest is control
+
+let incidentActive = false; // when true, the API tier surges checkout POSTs to feed the guard
 
 const LOAD_SCRIPT = path.join(__dirname, 'playwright-load.js');
 
@@ -225,17 +233,10 @@ function randomFutureDate(minDays, maxDays) {
   return d.toISOString().split('T')[0];
 }
 
-async function apiAction() {
-  const roll = Math.random();
-  if (roll < 0.4) return apiFetch('/api/destinations');
-  if (roll < 0.65) return apiFetch(`/api/destinations/${pick(destinationIds)}`);
-  if (roll < 0.9) {
-    const q = new URLSearchParams({ query: pick(SEARCH_TERMS), region: pick(REGIONS) });
-    return apiFetch(`/api/search?${q}`);
-  }
-  if (roll < 0.98) return apiFetch('/api/bookings');
-  // Occasional real checkout — exercises the flag-gated v2 path server-side
-  // (and the 5% simulated payment decline). Failures here are the point.
+// A real checkout attempt — exercises the flag-gated v2 path server-side. Each
+// identity is bucketed by the guarded rollout, so treatment identities fail
+// (firing server-side booking-error) and control identities succeed.
+function postBooking() {
   const identity = pick(apiIdentities);
   return apiFetch('/api/bookings', {
     method: 'POST',
@@ -248,6 +249,22 @@ async function apiAction() {
       contactEmail: identity,
     },
   });
+}
+
+async function apiAction() {
+  const roll = Math.random();
+  // Checkout surge: while a guarded rollout is live, hammer checkout so the
+  // guard metric reaches significance (and rolls back) within minutes.
+  if (incidentActive) return roll < 0.85 ? postBooking() : apiFetch(`/api/destinations/${pick(destinationIds)}`);
+
+  if (roll < 0.4) return apiFetch('/api/destinations');
+  if (roll < 0.65) return apiFetch(`/api/destinations/${pick(destinationIds)}`);
+  if (roll < 0.9) {
+    const q = new URLSearchParams({ query: pick(SEARCH_TERMS), region: pick(REGIONS) });
+    return apiFetch(`/api/search?${q}`);
+  }
+  if (roll < 0.98) return apiFetch('/api/bookings');
+  return postBooking();
 }
 
 async function apiLoop() {
@@ -267,22 +284,28 @@ async function apiLoop() {
       apiIdentities[Math.floor(Math.random() * apiIdentities.length)] = newIdentity();
       lastRotate = Date.now();
     }
-    const rpm = Math.max(1, API_RPM * (0.3 + 0.7 * activityNow()));
+    // Surge to a high fixed rate during an incident; otherwise follow the curve.
+    const rpm = incidentActive
+      ? Math.max(API_RPM, 60)
+      : Math.max(1, API_RPM * (0.3 + 0.7 * activityNow()));
     await sleep(jitter(60_000 / rpm));
   }
 }
 
 // ── Incident scheduler ────────────────────────────────────────────────────────
 
-async function ldRequest(method, pathname, { body, semanticPatch = false } = {}) {
+async function ldRequest(method, pathname, { body, semanticPatch = false, beta = false } = {}) {
+  const headers = {
+    Authorization: LD_TOKEN,
+    'Content-Type': semanticPatch
+      ? 'application/json; domain-model=launchdarkly.semanticpatch'
+      : 'application/json',
+  };
+  // The automated-release (guarded rollout) API is versioned beta.
+  if (beta) headers['LD-API-Version'] = 'beta';
   const res = await fetch(`${LD_BASE}${pathname}`, {
     method,
-    headers: {
-      Authorization: LD_TOKEN,
-      'Content-Type': semanticPatch
-        ? 'application/json; domain-model=launchdarkly.semanticpatch'
-        : 'application/json',
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
@@ -302,8 +325,9 @@ async function ensureCheckoutFlag() {
         key: FLAG_KEY,
         name: 'New Checkout Flow',
         description:
-          'Gates the v2 checkout code path. ON = new checkout logic (demo bug: ~50% of confirms fail). ' +
-          'OFF = stable v1 checkout. Turned ON daily at 8am ET by the traffic conductor to simulate a bad deploy; toggle OFF to recover.',
+          'Gates the v2 checkout code path. Treatment (true) = new checkout logic with a bad deploy: EVERY confirm fails with a 500. ' +
+          'Control (false) = stable v1 checkout. Shipped daily at 7am ET as a guarded rollout by the traffic conductor; ' +
+          'LaunchDarkly auto-rolls-back when the booking-error metric regresses.',
         clientSideAvailability: { usingEnvironmentId: true, usingMobileKey: true },
         variations: [
           { value: true, name: 'New checkout (v2)', description: 'New checkout logic — buggy' },
@@ -321,16 +345,102 @@ async function ensureCheckoutFlag() {
   }
 }
 
-function patchFlag(instruction, comment) {
+// The guard metric: an occurrence metric on the booking-error event where
+// fewer occurrences is better. Fired server-side (routes/bookings.js) and
+// client-side (booking.html) with the same context key that evaluated the flag.
+async function ensureMetric() {
+  try {
+    await ldRequest('POST', `/api/v2/metrics/${PROJECT_KEY}`, {
+      body: {
+        key: METRIC_KEY,
+        name: 'Booking Errors',
+        kind: 'custom',
+        isNumeric: false,
+        eventKey: METRIC_KEY,
+        successCriteria: 'LowerThanBaseline',
+        randomizationUnits: ['user'],
+        description: 'Booking confirmation failures. Guard metric for the new-checkout-flow guarded rollout.',
+        tags: ['toggletravel-demo'],
+      },
+    });
+    log(`created metric ${METRIC_KEY}`);
+  } catch (err) {
+    if (err.status === 409) log(`metric ${METRIC_KEY} already exists`);
+    else throw err;
+  }
+}
+
+// Resolve the flag's true/false variation IDs and current env targeting state.
+async function getFlagState() {
+  const flag = await ldRequest('GET', `/api/v2/flags/${PROJECT_KEY}/${FLAG_KEY}?env=${ENV_KEY}`);
+  const variations = flag.variations || [];
+  const env = flag.environments?.[ENV_KEY] || {};
+  const falseIdx = variations.findIndex((v) => v.value === false);
+  return {
+    trueId: variations.find((v) => v.value === true)?._id,
+    falseId: variations.find((v) => v.value === false)?._id,
+    on: !!env.on,
+    fallthroughIsFalse: env.fallthrough?.variation === falseIdx,
+    falseIdx,
+  };
+}
+
+function patchFlag(instructions, comment, { beta = false } = {}) {
   return ldRequest('PATCH', `/api/v2/flags/${PROJECT_KEY}/${FLAG_KEY}`, {
     semanticPatch: true,
-    body: { environmentKey: ENV_KEY, comment, instructions: [{ kind: instruction }] },
+    beta,
+    body: { environmentKey: ENV_KEY, comment, instructions },
   });
 }
 
-async function flagIsOn() {
-  const flag = await ldRequest('GET', `/api/v2/flags/${PROJECT_KEY}/${FLAG_KEY}?env=${ENV_KEY}`);
-  return !!flag.environments?.[ENV_KEY]?.on;
+// GET the automated releases for this flag/env; return the most recent one that
+// is still running (monitoring/paused), or null once it has resolved/rolled back.
+async function getActiveRelease() {
+  const data = await ldRequest(
+    'GET',
+    `/api/v2/projects/${PROJECT_KEY}/flags/${FLAG_KEY}/environments/${ENV_KEY}/automated-releases`,
+    { beta: true },
+  );
+  const releases = Array.isArray(data?.items) ? data.items : (data ? [data] : []);
+  const release = releases[0];
+  if (!release || !release.id) return null;
+  const status = release.status?.kind || release.status || 'unknown';
+  return ['monitoring', 'paused'].includes(status) ? { id: release.id, status } : null;
+}
+
+async function startGuardedRollout(state) {
+  return patchFlag(
+    [{
+      kind: 'startAutomatedRelease',
+      releaseKind: 'guarded',
+      originalVariationId: state.falseId,
+      targetVariationId: state.trueId,
+      randomizationUnit: 'user',
+      stages: [{ allocation: GUARDED_ALLOCATION, durationMillis: MONITOR_WINDOW_MIN * 60_000 }],
+      metrics: [{ key: METRIC_KEY, isGroup: false }],
+      metricMonitoringPreferences: { [METRIC_KEY]: { autoRollback: true } },
+    }],
+    'Deploy: new checkout v2 — guarded rollout at 50%, guarded by Booking Errors',
+    { beta: true },
+  );
+}
+
+function stopGuardedRollout(state, comment) {
+  return patchFlag(
+    [{ kind: 'stopAutomatedRelease', finalVariationId: state.falseId }],
+    comment,
+    { beta: true },
+  );
+}
+
+// Reset the flag to a clean baseline: ON, fallthrough serving false (control).
+async function resetToBaseline(state) {
+  const instructions = [];
+  if (!state.on) instructions.push({ kind: 'turnFlagOn' });
+  if (!state.fallthroughIsFalse) {
+    instructions.push({ kind: 'updateFallthroughVariationOrRollout', variationId: state.falseId });
+  }
+  if (instructions.length) await patchFlag(instructions, 'Guarded rollout demo: reset to safe baseline (serving stable checkout)');
 }
 
 async function incidentLoop() {
@@ -341,16 +451,17 @@ async function incidentLoop() {
 
   try {
     await ensureCheckoutFlag();
+    await ensureMetric();
   } catch (err) {
-    log(`incident scheduler: could not ensure flag (${err.message}) — continuing; will retry flips anyway`);
+    log(`incident scheduler: could not ensure flag/metric (${err.message}) — continuing; will retry at fire time`);
   }
 
   const testFireAt = TEST_DELAY_MIN ? Date.now() + TEST_DELAY_MIN * 60_000 : null;
   let testFired = false;
   let firedForDate = null;
-  let revertDeadline = null;
+  let backstopDeadline = null;
 
-  log(`incident scheduler: daily at ${String(INCIDENT_HOUR_ET).padStart(2, '0')}:00 ET, auto-revert after ${AUTO_REVERT_MIN}m${testFireAt ? ` (TEST fire in ${TEST_DELAY_MIN}m)` : ''}`);
+  log(`incident scheduler: guarded rollout daily at ${String(INCIDENT_HOUR_ET).padStart(2, '0')}:00 ET, ${MONITOR_WINDOW_MIN}m monitoring window, ${AUTO_REVERT_MIN}m safety-net backstop${testFireAt ? ` (TEST fire in ${TEST_DELAY_MIN}m)` : ''}`);
 
   for (;;) {
     try {
@@ -359,27 +470,47 @@ async function incidentLoop() {
         ? (!testFired && Date.now() >= testFireAt)
         : (et.hour === INCIDENT_HOUR_ET && et.minute < 2 && firedForDate !== et.dateKey);
 
-      if (shouldFire) {
-        await patchFlag('turnFlagOn', 'Deploy: checkout v2 rollout (scripted daily incident — toggle OFF to recover)');
+      if (shouldFire && !incidentActive) {
         firedForDate = et.dateKey;
         testFired = true;
-        revertDeadline = Date.now() + AUTO_REVERT_MIN * 60_000;
-        log(`🔥 incident started — ${FLAG_KEY} ON (checkout v2 live, ~50% of confirms will fail)`);
+        await ensureCheckoutFlag();
+        await ensureMetric();
+        const state = await getFlagState();
+        if (!state.trueId || !state.falseId) throw new Error('could not resolve flag variation IDs');
+
+        // Clear any release left over from a prior run, then start clean.
+        if (await getActiveRelease()) {
+          await stopGuardedRollout(state, 'Clearing prior guarded rollout before re-arming');
+        }
+        await resetToBaseline(state);
+        await startGuardedRollout(state);
+
+        incidentActive = true;
+        backstopDeadline = Date.now() + AUTO_REVERT_MIN * 60_000;
+        log(`🔥 guarded rollout started — new checkout v2 at 50%, guarded by ${METRIC_KEY}; checkout surge ON`);
       }
 
-      if (revertDeadline && Date.now() >= revertDeadline) {
-        if (await flagIsOn()) {
-          await patchFlag('turnFlagOff', 'Auto-revert: error budget exceeded (demo safety net)');
-          log(`✅ incident auto-reverted — ${FLAG_KEY} OFF`);
-        } else {
-          log('incident already resolved manually — nice save');
+      // While an incident is live, watch for LaunchDarkly's auto-rollback.
+      if (incidentActive) {
+        const active = await getActiveRelease();
+        if (!active) {
+          // LD resolved the release (rolled back on the metric regression).
+          incidentActive = false;
+          backstopDeadline = null;
+          log(`✅ guarded rollout resolved by LaunchDarkly — checkout recovered, surge OFF`);
+        } else if (backstopDeadline && Date.now() >= backstopDeadline) {
+          // Safety net: guard never reached significance (slow morning). Force it.
+          const state = await getFlagState();
+          await stopGuardedRollout(state, 'Safety-net backstop: stopping rollout after timeout');
+          incidentActive = false;
+          backstopDeadline = null;
+          log(`🛑 safety-net backstop fired — guarded rollout stopped, surge OFF`);
         }
-        revertDeadline = null;
       }
     } catch (err) {
       log(`incident scheduler error: ${err.message}`);
     }
-    await sleep(30_000);
+    await sleep(incidentActive ? 20_000 : 30_000);
   }
 }
 

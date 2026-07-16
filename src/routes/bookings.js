@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const bookingService = require('../services/bookingService');
-const { getFlag } = require('../launchdarkly');
+const { getFlag, track } = require('../launchdarkly');
 const logger = require('../logger');
 
 router.post('/', async (req, res, next) => {
@@ -16,19 +16,24 @@ router.post('/', async (req, res, next) => {
       throw err;
     }
 
-    // Flag-gated checkout version. When new-checkout-flow is ON, the "v2"
-    // code path runs — it has a bug that fails ~half of confirms with a 500.
-    // Toggling the flag OFF in LaunchDarkly reverts to the stable v1 path
-    // instantly (evaluated per request). The traffic conductor turns it ON
-    // daily at 8am ET to simulate a bad deploy.
+    // Flag-gated checkout version. When new-checkout-flow is ON for this
+    // request's context, the "v2" code path runs — a bad deploy that fails
+    // EVERY confirm with a 500 (all destinations). The flag is served via a
+    // guarded rollout (started daily at 7am ET by the traffic conductor), so
+    // only the treatment arm hits this; the control arm checks out normally.
+    // LaunchDarkly watches the booking-error metric and auto-rolls-back within
+    // minutes. We track booking-error server-side here (same context key that
+    // evaluated the flag) so the guard is fed by API traffic too, not just
+    // browser sessions.
     const useV2Checkout = await getFlag('new-checkout-flow', false, req.sessionId);
-    if (useV2Checkout && Math.random() < 0.5) {
+    if (useV2Checkout) {
       logger.error('checkout_v2_failed', {
         checkout_version: 'v2',
         destination_id: destinationId,
         session_id: req.sessionId,
         error: 'payment intent missing',
       });
+      track('booking-error', req.sessionId, { destination_id: destinationId, http_status: 500 });
       const err = new Error('CheckoutV2Error: payment intent missing — unable to confirm booking');
       err.status = 500;
       throw err;

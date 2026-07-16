@@ -475,6 +475,26 @@
               <a href="/search.html" class="btn" style="background:#fff;color:#7a1d1d;font-weight:700">Browse other destinations</a>
             </div>
           `;
+        } else if (err.status === 500) {
+          // New-checkout-flow (v2) failure — the flag-gated "bad deploy" that
+          // breaks confirm & pay for the guarded-rollout treatment arm. Shown
+          // as a prominent backend error, mirroring the Atlantis 404 banner.
+          const traceLine = err.traceId
+            ? `<div style="font-family:monospace;font-size:.78rem;color:rgba(255,255,255,.7);margin-top:14px">Trace: ${err.traceId.slice(0, 16)}…</div>`
+            : '';
+          errorEl.removeAttribute('class');
+          errorEl.style.cssText = 'display:block;background:linear-gradient(135deg,#7a1d1d,#3a0d0d);color:#fff;border-radius:var(--radius);padding:28px;margin-bottom:16px;box-shadow:0 8px 24px rgba(122,29,29,.3)';
+          errorEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="font-size:1.6rem">💥</span>
+              <strong style="font-size:1.5rem;font-weight:900;letter-spacing:-.3px">500 — Checkout Unavailable</strong>
+            </div>
+            <p style="font-size:1rem;line-height:1.55;margin:0 0 16px;color:rgba(255,255,255,.92)">${err.message}</p>
+            ${traceLine}
+            <div style="margin-top:18px">
+              <button onclick="confirmBooking()" class="btn" style="background:#fff;color:#7a1d1d;font-weight:700">Try again</button>
+            </div>
+          `;
         } else {
           errorEl.className = 'alert alert-error';
           errorEl.style.cssText = 'display:block;margin-bottom:16px';

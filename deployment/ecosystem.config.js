@@ -20,7 +20,7 @@ module.exports = {
     },
     {
       // 24/7 traffic conductor — diurnal load gen + API traffic + daily
-      // 8am ET checkout incident (see scripts/traffic-conductor.js).
+      // 7am ET guarded-rollout checkout incident (see scripts/traffic-conductor.js).
       name: 'toggle-traffic',
       script: 'scripts/traffic-conductor.js',
       instances: 1,
@@ -33,6 +33,10 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         TRAFFIC_ENABLED: 'true',
+        // TEMPORARY (validation only — REVERT after watching the rollback):
+        // fire the guarded rollout 2 min after boot instead of waiting for 7am.
+        INCIDENT_TEST_DELAY_MIN: '2',
+        INCIDENT_AUTO_REVERT_MIN: '12',
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: '/var/log/toggle-travel/traffic-error.log',
