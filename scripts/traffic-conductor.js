@@ -64,7 +64,13 @@ const FLAG_KEY    = 'new-checkout-flow';
 const METRIC_KEY  = 'booking-error';
 const GUARDED_ALLOCATION = 50000; // 50% — the guarded-rollout max; the rest is control
 
-let incidentActive = false; // when true, the API tier surges checkout POSTs to feed the guard
+// During an incident the API tier feeds the guard (bulk signal) at this reduced
+// rate so the rollout stays open a few minutes — long enough for the browser
+// checkout surge to land real (recorded) treatment-arm sessions before rollback.
+const INCIDENT_API_RPM        = num(process.env.INCIDENT_API_RPM, 15);
+const INCIDENT_CHECKOUT_COUNT = num(process.env.INCIDENT_CHECKOUT_COUNT, 6); // browser checkouts per surge round
+
+let incidentActive = false; // when true: API checkout surge + browser checkout surge feed the guard
 
 const LOAD_SCRIPT = path.join(__dirname, 'playwright-load.js');
 
@@ -127,16 +133,35 @@ async function demoRunActive() {
   }
 }
 
-function runLoadRound(browser) {
+// Wait up to `ms`, but return early the moment an incident starts so the
+// browser tier can switch to the checkout surge without finishing a long
+// diurnal sleep.
+async function sleepUntilIncidentOr(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (incidentActive) return;
+    await sleep(Math.min(5_000, end - Date.now()));
+  }
+}
+
+function runLoadRound(browser, { checkoutSurge = 0 } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [
+    const args = [
       LOAD_SCRIPT,
       '--host', HOST,
       '--rounds', '1',
       '--pause', '1',
       '--browsers', browser,
-      '--unique-personas', String(UNIQUE_PCT),
-    ]);
+    ];
+    if (checkoutSurge > 0) {
+      // Only completeBooking sessions, each a fresh identity, so ~half bucket
+      // into the guarded-rollout treatment arm and record a failing new-checkout
+      // replay (500 banner + "NEW CHECKOUT" badge).
+      args.push('--checkout', String(checkoutSurge), '--checkout-only', '--unique-personas', '100');
+    } else {
+      args.push('--unique-personas', String(UNIQUE_PCT));
+    }
+    const child = spawn(process.execPath, args);
     activeChild = child;
 
     // Keep PM2 logs readable: only surface problems and round boundaries.
@@ -163,6 +188,17 @@ async function browserLoop() {
   log(`browser tier: rounds every ${PEAK_MIN}m (peak) … ${TROUGH_MIN}m (trough), unique personas ${UNIQUE_PCT}%`);
   for (;;) {
     try {
+      // During an incident, run back-to-back checkout-only surge rounds so the
+      // treatment arm gets real recorded browser sessions (failing new checkout)
+      // before the guard rolls back. Only the browser tier spawns browsers, so
+      // there's still just one headless Chromium alive at a time.
+      if (incidentActive) {
+        log(`browser round starting (checkout surge ×${INCIDENT_CHECKOUT_COUNT}, incident)`);
+        const code = await runLoadRound('chrome', { checkoutSurge: INCIDENT_CHECKOUT_COUNT });
+        if (code !== 0) log(`checkout surge round exited with code ${code}`);
+        await sleep(jitter(3_000));
+        continue;
+      }
       if (await demoRunActive()) {
         log('manual demo run in progress — standing down for 60s');
         await sleep(60_000);
@@ -175,10 +211,11 @@ async function browserLoop() {
     } catch (err) {
       log(`browser loop error: ${err.message}`);
     }
+    if (incidentActive) continue; // no long sleep mid-incident
     const intervalMin = PEAK_MIN + (TROUGH_MIN - PEAK_MIN) * (1 - activityNow());
     const waitMs = jitter(intervalMin * 60_000);
     log(`next browser round in ~${Math.round(waitMs / 60_000)}m`);
-    await sleep(waitMs);
+    await sleepUntilIncidentOr(waitMs);
   }
 }
 
@@ -284,9 +321,11 @@ async function apiLoop() {
       apiIdentities[Math.floor(Math.random() * apiIdentities.length)] = newIdentity();
       lastRotate = Date.now();
     }
-    // Surge to a high fixed rate during an incident; otherwise follow the curve.
+    // During an incident, hold a moderate fixed rate (bulk guard signal) — low
+    // enough that the rollout stays open a few minutes for the browser checkout
+    // surge to record treatment sessions before rollback. Otherwise follow the curve.
     const rpm = incidentActive
-      ? Math.max(API_RPM, 60)
+      ? INCIDENT_API_RPM
       : Math.max(1, API_RPM * (0.3 + 0.7 * activityNow()));
     await sleep(jitter(60_000 / rpm));
   }

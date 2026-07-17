@@ -28,6 +28,12 @@
  *   --atlantis-only      Skip all other persona flows — every round runs ONLY the
  *                        Atlantis booking sessions. Use with --atlantis to feed a
  *                        guarded rollout's regression detection as fast as possible.
+ *   --checkout <n>       Run n completeBooking sessions per round (default 0, max 20),
+ *                        each a UNIQUE identity so ~half bucket into the new-checkout-flow
+ *                        treatment arm and record a FAILING new-checkout replay.
+ *   --checkout-only      Skip all other persona flows — every round runs ONLY the
+ *                        checkout surge sessions. Used by the conductor during the
+ *                        guarded-rollout incident to populate treatment session replays.
  *   --unique-personas <pct>  Percent chance (0-100, default 0) that each flow runs
  *                        as a brand-new synthetic identity instead of one of the five
  *                        recurring personas. The 24/7 traffic conductor passes ~70 so
@@ -52,6 +58,8 @@ const PAUSE_SEC = parseInt(arg('--pause')  || '3', 10);
 const BROWSERS  = (arg('--browsers') || 'chrome').split(',').map((b) => b.trim().toLowerCase());
 const ATLANTIS       = Math.min(Math.max(parseInt(arg('--atlantis') || '1', 10), 1), 20);
 const ATLANTIS_ONLY  = process.argv.includes('--atlantis-only');
+const CHECKOUT       = Math.min(Math.max(parseInt(arg('--checkout') || '0', 10), 0), 20);
+const CHECKOUT_ONLY  = process.argv.includes('--checkout-only');
 const UNIQUE_PCT     = Math.min(Math.max(parseInt(arg('--unique-personas') || '0', 10), 0), 100);
 const RUN_ID    = Date.now().toString(36).slice(-6);
 
@@ -398,6 +406,83 @@ async function abandonedCheckout(page, browserLabel, persona) {
   log('→ walked away (no booking)');
 }
 
+// Known-good (non-Atlantis) destinations for the checkout surge. dest-013 is
+// Atlantis, which always 404s on its own — excluded so the ONLY failure cause
+// is the new-checkout-flow treatment path.
+const CHECKOUT_DESTS = ['dest-001', 'dest-002', 'dest-003', 'dest-004', 'dest-005', 'dest-006', 'dest-007'];
+
+/**
+ * Checkout surge: go straight to the booking form for a known-good destination,
+ * fill it, and confirm. When the persona is in the new-checkout-flow treatment
+ * arm the server returns 500 and booking.html shows the "Checkout Unavailable"
+ * banner — a clean failing-new-checkout session replay. Control-arm personas
+ * book successfully. Used to populate treatment-arm replays during the incident.
+ */
+async function checkoutSurgeBooking(page, browserLabel, persona) {
+  section(`[${persona.name} / ${browserLabel}] Checkout Surge`);
+  const dest = pick(CHECKOUT_DESTS);
+  const dep = new Date(); dep.setDate(dep.getDate() + jitter(20, 45));
+  const ret = new Date(); ret.setDate(ret.getDate() + jitter(50, 70));
+  const depStr = dep.toISOString().split('T')[0];
+
+  let t = Date.now();
+  await page.goto(`/booking.html?destinationId=${dest}&travelers=2&departure=${depStr}`);
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  ok(`Opened checkout for ${dest} (${Date.now() - t}ms)`);
+  await sleep(jitter(600, 1000));
+
+  // Step 1 → Continue
+  const travelersSelect = page.locator('#f-travelers');
+  if (await travelersSelect.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await travelersSelect.selectOption(String(jitter(1, 3)));
+    await sleep(jitter(200, 400));
+  }
+  const continueBtn = page.getByRole('button', { name: /Continue/i });
+  if (!(await continueBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    warn('Checkout: Continue button not found — skipping');
+    return;
+  }
+  await continueBtn.click();
+  await sleep(jitter(400, 800));
+
+  // Step 2: email → Review
+  const emailInput = page.locator('#f-email');
+  await emailInput.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+  if (await emailInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await emailInput.fill(persona.email);
+    await sleep(jitter(300, 600));
+  }
+  const reviewBtn = page.getByRole('button', { name: /Review Booking/i });
+  if (!(await reviewBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    warn('Checkout: Review button not found — skipping');
+    return;
+  }
+  await reviewBtn.click();
+  await sleep(jitter(400, 800));
+
+  // Step 3: confirm & pay — this is where treatment fails with the 500 banner
+  const confirmBtn = page.locator('#confirm-btn');
+  await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+  if (!(await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
+    warn('Checkout: Confirm button not found');
+    return;
+  }
+  t = Date.now();
+  await confirmBtn.click();
+  const success = await page.locator('#success-state').waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+  const error   = await page.locator('#booking-error').isVisible({ timeout: 500 }).catch(() => false);
+  if (success) {
+    ok(`Checkout succeeded — control arm (${Date.now() - t}ms)`);
+  } else if (error) {
+    const errText = await page.locator('#booking-error').textContent().catch(() => '');
+    fail(`Checkout FAILED — treatment arm: ${errText.trim().slice(0, 60)} (${Date.now() - t}ms)`);
+  } else {
+    warn(`Checkout outcome unclear (${Date.now() - t}ms)`);
+  }
+  // Let session replay flush before the browser closes.
+  await sleep(jitter(1500, 2500));
+}
+
 /**
  * Complete booking: search → view destination → fill booking form → confirm.
  */
@@ -626,7 +711,7 @@ async function runRound(round, browserKey) {
   process.stdout.write(`Round ${round} of ${ROUNDS}  [${config.label}]\n`);
   separator();
 
-  if (!ATLANTIS_ONLY) {
+  if (!ATLANTIS_ONLY && !CHECKOUT_ONLY) {
     const shopper1 = maybeUniquePersona(p2);
     await withBrowser(browserKey, shopper1,  (page, label) => windowShopper(page, label, shopper1));
     await sleep(jitter(1500, 2500));
@@ -646,15 +731,36 @@ async function runRound(round, browserKey) {
 
   // Atlantis sessions — in surge mode (--atlantis > 1) each gets a unique
   // email so the guarded rollout buckets them as distinct users across arms.
-  for (let a = 0; a < ATLANTIS; a++) {
-    const poseidon = ATLANTIS > 1
-      ? { ...p4, email: `poseidon+${RUN_ID}-r${round}-${a}@demo.toggletravel.io` }
-      : p4;
-    await withBrowser(browserKey, poseidon,  (page, label) => atlantisBooking(page, label, poseidon));
+  // Skipped entirely in checkout-only mode.
+  if (!CHECKOUT_ONLY) {
+    for (let a = 0; a < ATLANTIS; a++) {
+      const poseidon = ATLANTIS > 1
+        ? { ...p4, email: `poseidon+${RUN_ID}-r${round}-${a}@demo.toggletravel.io` }
+        : p4;
+      await withBrowser(browserKey, poseidon,  (page, label) => atlantisBooking(page, label, poseidon));
+      await sleep(jitter(500, 1200));
+    }
+  }
+
+  // Checkout surge — each session is a fresh identity so ~half bucket into the
+  // new-checkout-flow guarded rollout's treatment arm and record a FAILING
+  // new-checkout replay (500 banner + "NEW CHECKOUT" badge) on a known-good
+  // destination. Drives the treatment-arm session replays during the incident.
+  for (let c = 0; c < CHECKOUT; c++) {
+    const first = pick(VISITOR_NAMES);
+    const geo = pick(VISITOR_LOCALES);
+    visitorSeq += 1;
+    const booker = {
+      ...p0,
+      ...geo,
+      name: first.charAt(0).toUpperCase() + first.slice(1),
+      email: `${first}-${RUN_ID}-c${round}-${c}@demo.toggletravel.io`,
+    };
+    await withBrowser(browserKey, booker,    (page, label) => checkoutSurgeBooking(page, label, booker));
     await sleep(jitter(500, 1200));
   }
 
-  if (!ATLANTIS_ONLY) {
+  if (!ATLANTIS_ONLY && !CHECKOUT_ONLY) {
     await sleep(jitter(1000, 1500));
     await withBrowser(browserKey, p2,        (page, label) => errorFlow(page, label, p2));
   }
@@ -665,7 +771,7 @@ async function runRound(round, browserKey) {
 async function main() {
   process.stdout.write('Toggle Travel — Playwright Load\n');
   process.stdout.write(`Host:     ${BASE}\n`);
-  process.stdout.write(`Rounds:   ${ROUNDS}  |  Pause: ${PAUSE_SEC}s  |  Browsers: ${BROWSERS.join(', ')}${ATLANTIS > 1 ? `  |  Atlantis surge: ×${ATLANTIS}` : ''}${ATLANTIS_ONLY ? '  |  ATLANTIS ONLY' : ''}\n`);
+  process.stdout.write(`Rounds:   ${ROUNDS}  |  Pause: ${PAUSE_SEC}s  |  Browsers: ${BROWSERS.join(', ')}${ATLANTIS > 1 ? `  |  Atlantis surge: ×${ATLANTIS}` : ''}${ATLANTIS_ONLY ? '  |  ATLANTIS ONLY' : ''}${CHECKOUT > 0 ? `  |  Checkout surge: ×${CHECKOUT}` : ''}${CHECKOUT_ONLY ? '  |  CHECKOUT ONLY' : ''}\n`);
   process.stdout.write(`Run ID:   ${RUN_ID}\n`);
 
   // Validate browser list
@@ -687,7 +793,8 @@ async function main() {
     return;
   }
 
-  const totalSessions = ROUNDS * BROWSERS.length * (ATLANTIS_ONLY ? ATLANTIS : 5 + ATLANTIS); // flows per round
+  const flowsPerRound = CHECKOUT_ONLY ? CHECKOUT : ATLANTIS_ONLY ? ATLANTIS : (5 + ATLANTIS + CHECKOUT);
+  const totalSessions = ROUNDS * BROWSERS.length * flowsPerRound;
 
   for (let i = 1; i <= ROUNDS; i++) {
     for (const browserKey of BROWSERS) {
