@@ -370,18 +370,29 @@ async function ensureMetric() {
   }
 }
 
-// Resolve the flag's true/false variation IDs and current env targeting state.
-async function getFlagState() {
+// Read everything we need from the flag itself — variation IDs, on/off, and
+// whether a guarded release is currently running. A live guarded release shows
+// up as a fallthrough ROLLOUT with an experimentAllocation; once it resolves
+// (rolled back or completed) the fallthrough is a plain variation again. This
+// relies only on the rock-solid flag GET — no fragile beta releases endpoint.
+async function getReleaseState() {
   const flag = await ldRequest('GET', `/api/v2/flags/${PROJECT_KEY}/${FLAG_KEY}?env=${ENV_KEY}`);
   const variations = flag.variations || [];
-  const env = flag.environments?.[ENV_KEY] || {};
+  const trueIdx = variations.findIndex((v) => v.value === true);
   const falseIdx = variations.findIndex((v) => v.value === false);
+  const env = flag.environments?.[ENV_KEY] || {};
+  const ft = env.fallthrough || {};
+  const releaseActive = !!(ft.rollout && ft.rollout.experimentAllocation);
+  const ftVariation = (!releaseActive && typeof ft.variation === 'number') ? ft.variation : null;
   return {
-    trueId: variations.find((v) => v.value === true)?._id,
-    falseId: variations.find((v) => v.value === false)?._id,
-    on: !!env.on,
-    fallthroughIsFalse: env.fallthrough?.variation === falseIdx,
+    trueId: variations[trueIdx]?._id,
+    falseId: variations[falseIdx]?._id,
+    trueIdx,
     falseIdx,
+    on: !!env.on,
+    releaseActive,
+    servingControl: ftVariation === falseIdx,
+    servingTreatment: ftVariation === trueIdx,
   };
 }
 
@@ -391,21 +402,6 @@ function patchFlag(instructions, comment, { beta = false } = {}) {
     beta,
     body: { environmentKey: ENV_KEY, comment, instructions },
   });
-}
-
-// GET the automated releases for this flag/env; return the most recent one that
-// is still running (monitoring/paused), or null once it has resolved/rolled back.
-async function getActiveRelease() {
-  const data = await ldRequest(
-    'GET',
-    `/api/v2/projects/${PROJECT_KEY}/flags/${FLAG_KEY}/environments/${ENV_KEY}/automated-releases`,
-    { beta: true },
-  );
-  const releases = Array.isArray(data?.items) ? data.items : (data ? [data] : []);
-  const release = releases[0];
-  if (!release || !release.id) return null;
-  const status = release.status?.kind || release.status || 'unknown';
-  return ['monitoring', 'paused'].includes(status) ? { id: release.id, status } : null;
 }
 
 async function startGuardedRollout(state) {
@@ -434,10 +430,11 @@ function stopGuardedRollout(state, comment) {
 }
 
 // Reset the flag to a clean baseline: ON, fallthrough serving false (control).
+// (Call only when no guarded release is active — stop it first if one is.)
 async function resetToBaseline(state) {
   const instructions = [];
   if (!state.on) instructions.push({ kind: 'turnFlagOn' });
-  if (!state.fallthroughIsFalse) {
+  if (!state.servingControl) {
     instructions.push({ kind: 'updateFallthroughVariationOrRollout', variationId: state.falseId });
   }
   if (instructions.length) await patchFlag(instructions, 'Guarded rollout demo: reset to safe baseline (serving stable checkout)');
@@ -475,14 +472,16 @@ async function incidentLoop() {
         testFired = true;
         await ensureCheckoutFlag();
         await ensureMetric();
-        const state = await getFlagState();
+        let state = await getReleaseState();
         if (!state.trueId || !state.falseId) throw new Error('could not resolve flag variation IDs');
 
         // Clear any release left over from a prior run, then start clean.
-        if (await getActiveRelease()) {
+        if (state.releaseActive) {
           await stopGuardedRollout(state, 'Clearing prior guarded rollout before re-arming');
+          state = await getReleaseState();
         }
         await resetToBaseline(state);
+        state = await getReleaseState();
         await startGuardedRollout(state);
 
         incidentActive = true;
@@ -492,15 +491,17 @@ async function incidentLoop() {
 
       // While an incident is live, watch for LaunchDarkly's auto-rollback.
       if (incidentActive) {
-        const active = await getActiveRelease();
-        if (!active) {
-          // LD resolved the release (rolled back on the metric regression).
+        const state = await getReleaseState();
+        if (!state.releaseActive) {
+          // LD resolved the release. Serving control = rolled back on the guard;
+          // serving treatment = rolled forward (completed).
           incidentActive = false;
           backstopDeadline = null;
-          log(`✅ guarded rollout resolved by LaunchDarkly — checkout recovered, surge OFF`);
+          log(state.servingTreatment
+            ? `⚠ guarded rollout completed (rolled forward to new checkout) — surge OFF`
+            : `✅ guarded rollout auto-rolled-back by LaunchDarkly — checkout recovered, surge OFF`);
         } else if (backstopDeadline && Date.now() >= backstopDeadline) {
           // Safety net: guard never reached significance (slow morning). Force it.
-          const state = await getFlagState();
           await stopGuardedRollout(state, 'Safety-net backstop: stopping rollout after timeout');
           incidentActive = false;
           backstopDeadline = null;
