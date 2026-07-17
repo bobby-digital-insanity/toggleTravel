@@ -33,9 +33,6 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         TRAFFIC_ENABLED: 'true',
-        // TEMPORARY (validation of the browser checkout surge — REVERT after):
-        // fire the guarded rollout 2 min after boot instead of waiting for 7am.
-        INCIDENT_TEST_DELAY_MIN: '2',
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: '/var/log/toggle-travel/traffic-error.log',
