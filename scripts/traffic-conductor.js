@@ -570,6 +570,16 @@ async function main() {
     for (;;) await sleep(3600_000);
   }
   log(`conductor starting — host ${HOST}, project ${PROJECT_KEY}, env ${ENV_KEY}`);
+
+  // One-time (idempotent) experimentation setup: ensures the booking-conversion
+  // / promo-click / destination-view metrics, the search-ranking flag, the
+  // promo-banner experiment, and the search-ranking MAB all exist. Fire-and-forget
+  // so a setup hiccup never blocks traffic; safe to re-run (skips what exists).
+  if (LD_TOKEN) {
+    require('./ld-experiment-setup').run((m) => log(`exp-setup: ${m}`))
+      .catch((err) => log(`exp-setup error (non-fatal): ${err.message}`));
+  }
+
   await Promise.all([browserLoop(), apiLoop(), incidentLoop()]);
 }
 

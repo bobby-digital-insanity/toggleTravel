@@ -31,6 +31,13 @@ Toggle Travel is a **Node.js/Express** server-rendered app used as a demo platfo
 
 - **`scripts/traffic-conductor.js`** — PM2 app `toggle-traffic` (see `deployment/ecosystem.config.js`). Three loops: (1) browser tier — spawns `playwright-load.js --rounds 1 --unique-personas 70` on a diurnal cadence (peak/trough intervals via env), pausing while a manual `/api/demo/seed` run is active; (2) API tier — cheap `fetch` traffic with rotating synthetic identities via `x-session-id`; (3) incident scheduler — daily at `INCIDENT_HOUR_ET` (7am ET) starts a **guarded rollout** on `new-checkout-flow` via LD REST (`LD_API_TOKEN`), watches for LaunchDarkly's auto-rollback, and force-stops after `INCIDENT_AUTO_REVERT_MIN` only as a backstop. Ensure-creates the flag + `booking-error` metric at boot.
 - **The guarded-rollout checkout incident**: at 7am the conductor calls `startAutomatedRelease` (guarded, `releaseKind: guarded`, `LD-API-Version: beta` header) on `new-checkout-flow` — treatment (`true`) at 50%, control (`false`) at 50%, guarded by the `booking-error` metric with `autoRollback`. `routes/bookings.js` evaluates the flag per request; treatment-arm confirms **always** throw `CheckoutV2Error` (500) for all destinations, and it fires `booking-error` **server-side** via `launchdarkly.js` `track()` (same `req.sessionId`/`x-session-id` context that evaluated the flag) so the cheap API-tier **checkout surge** feeds the guard. `booking.html` also fires `booking-error` client-side (replay timeline) and shows a styled "500 — Checkout Unavailable" banner + the "✨ NEW CHECKOUT" badge for treatment users. LaunchDarkly detects the regression vs. the healthy control arm and rolls back within minutes; the conductor then re-arms clean for the next day. Guarded rollouts cap treatment at 50% by design (the control arm is required for the comparison).
+
+### Experimentation & Multi-armed bandit
+
+- **Setup**: `scripts/ld-experiment-setup.js` (invoked once, idempotently, at conductor boot) creates via LD REST — metrics `booking-conversion` (event `confirm-booking`), `promo-click`, `destination-view` (all higher-is-better, unit `user`); the `search-ranking` flag; and both analyses through the stable `POST .../experiments` endpoint (`type: 'experiment'` vs `type: 'mab'`, `startIteration` to run). Requires `LD_API_TOKEN` + a `maintainerId` (`LD_MAINTAINER_ID`, defaults to the project owner). Safe to re-run — skips anything that exists.
+- **Experiment "Promo Banner Messaging"** on `promo-banner-text` (4 promos, fixed 25/25/25/25): which promo drives the most bookings. Primary metric `booking-conversion`, secondary `promo-click` (fired on the banner CTA in `nav.js`).
+- **MAB "Search Ranking Optimizer"** on `search-ranking` (recommended / price-low / price-high / trending; reallocates hourly): auto-shifts to the sort maximizing `destination-view` (fired on `destination.html`). `destinationService.search` maps the ranking → `ORDER BY`; `search.html` evaluates the flag after LD init and passes it to `/api/search`.
+- **Load-gen bias** (`playwright-load.js`) reads both flags via `readActiveFlags()` and biases rewards so the demo shows a decisive winner: **Free Upgrade** completes bookings ~90% vs ~55% (experiment), and **trending** shoppers view 3–5 destinations vs 1–2 (MAB). `completeBooking` books a non-Atlantis destination so the conversion signal isn't masked by the Atlantis 404.
 - **`services/`**
   - `vacationModeService.js` — Calls Anthropic Claude API. Returns structured JSON (welcome message, 3 destination recommendations, vibe, persona) when enabling; plain text farewell when disabling.
   - `bookingService.js` — SQLite-backed (via `src/db.js`, `better-sqlite3`; `DB_PATH` env). Booking create runs staged (inventory → payment → persist) with structured stage logs; Atlantis (dest-013) always 404s by design.
@@ -85,6 +92,8 @@ TRAFFIC_TROUGH_INTERVAL_MIN   # …and overnight (default 20)
 TRAFFIC_API_RPM               # API-tier req/min at peak (default 20)
 TRAFFIC_UNIQUE_PCT            # % of flows as new identities (default 70)
 INCIDENT_ENABLED / INCIDENT_HOUR_ET (7) / INCIDENT_MONITOR_WINDOW_MIN (5) / INCIDENT_AUTO_REVERT_MIN (20)  # Daily guarded-rollout checkout incident
+INCIDENT_API_RPM (15) / INCIDENT_CHECKOUT_COUNT (6)  # incident API rate + browser checkout-surge sessions
+LD_MAINTAINER_ID              # maintainer for REST-created experiments (defaults to project owner)
 SIMULATE_LATENCY_MAX_MS       # Default 1200 — set to 0 to disable artificial latency
 SIMULATE_PAYMENT_FAILURE_RATE # Default 0.05 (5%)
 ```

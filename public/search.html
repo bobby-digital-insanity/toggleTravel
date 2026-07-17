@@ -110,8 +110,15 @@
         document.getElementById('search-date').value = tomorrow.toISOString().split('T')[0];
       }
 
-      // Run initial search
-      runSearch();
+      // Run initial search after the LD client is ready, so search-ranking is
+      // evaluated by the initialized client (records the MAB exposure) rather
+      // than falling back to the default. Fall back if init stalls.
+      if (window.LDFlags && LDFlags.ready) {
+        LDFlags.ready.then(runSearch);
+        setTimeout(() => { if (!document.querySelector('#results-grid .card[data-id]')) runSearch(); }, 5500);
+      } else {
+        runSearch();
+      }
 
       // Debounced live search on text input
       document.getElementById('search-q').addEventListener('input', () => {
@@ -149,6 +156,11 @@
       `).join('');
       noResults.style.display = 'none';
 
+      // search-ranking is the multi-armed bandit lever: evaluating it here
+      // buckets this user into a variation, and the server sorts results to
+      // match. destination-view (fired on the destination page) is the reward.
+      const ranking = (window.LDFlags && LDFlags.get('search-ranking')) || 'recommended';
+
       try {
         const startTime = Date.now();
         const data = await api.post('/api/search', {
@@ -156,10 +168,12 @@
           region: region || undefined,
           maxPrice: maxPrice ? Number(maxPrice) : undefined,
           departureDate: date,
+          ranking,
         });
 
         const elapsed = Date.now() - startTime;
-        status.innerHTML = `<span style="color:var(--success)">✓</span> ${elapsed}ms`;
+        const RANK_LABELS = { recommended: 'Recommended', 'price-low': 'Price: low to high', 'price-high': 'Price: high to low', trending: 'Trending' };
+        status.innerHTML = `<span style="color:var(--success)">✓</span> ${elapsed}ms &middot; Sorted by ${RANK_LABELS[ranking] || 'Recommended'}`;
         header.textContent = `${data.count} destination${data.count !== 1 ? 's' : ''} found`;
 
         if (data.results.length === 0) {

@@ -44,7 +44,17 @@ async function getById(id) {
   return rowToDestination(row);
 }
 
-async function search({ query = '', region, minPrice, maxPrice, departureDate }) {
+// Sort orders for the search-ranking MAB. `recommended` preserves the original
+// behavior (rating DESC). All are whitelisted — the ranking value comes from a
+// flag but is never interpolated raw into SQL.
+const RANKING_SQL = {
+  recommended: 'rating DESC',
+  'price-low': 'base_price ASC',
+  'price-high': 'base_price DESC',
+  trending: 'rating DESC, base_price ASC',
+};
+
+async function search({ query = '', region, minPrice, maxPrice, departureDate, ranking = 'recommended' }) {
   const where = [];
   const params = {};
 
@@ -65,7 +75,8 @@ async function search({ query = '', region, minPrice, maxPrice, departureDate })
     params.maxPrice = Number(maxPrice);
   }
 
-  const sql = `SELECT * FROM destinations${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY rating DESC`;
+  const orderBy = RANKING_SQL[ranking] || RANKING_SQL.recommended;
+  const sql = `SELECT * FROM destinations${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY ${orderBy}`;
   const rows = db.all(sql, params);
   const results = rows.map(rowToDestination);
 
@@ -87,6 +98,7 @@ async function search({ query = '', region, minPrice, maxPrice, departureDate })
   logger.info('search_performed', {
     query,
     region: region || 'all',
+    ranking,
     results_count: enriched.length,
   });
 

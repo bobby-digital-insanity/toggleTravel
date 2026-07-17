@@ -19,6 +19,7 @@ window.LDFlags = (function () {
     'ai-planner-enabled':         true,
     'atlantis-booking-enabled':   false,
     'new-checkout-flow':          false,
+    'search-ranking':             'recommended',
   };
 
   // Set by Playwright load script (scripts/playwright-load.js) per browser session

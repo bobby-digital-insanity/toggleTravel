@@ -321,6 +321,11 @@ function buildPromoBanner(text) {
   btn.href = '/search.html';
   btn.textContent = 'Search Flights →';
   btn.style.cssText = 'background:#fff;color:#405BFF;padding:.25rem .75rem;border-radius:999px;font-size:.8rem;font-weight:700;text-decoration:none;white-space:nowrap;';
+  // promo-click: secondary metric for the promo-banner experiment. Fires against
+  // the same context that evaluated promo-banner-text, so it's attributable per arm.
+  btn.addEventListener('click', () => {
+    try { window.LDFlags?.track('promo-click', { promo: text }); } catch (_) { /* never block nav */ }
+  });
   banner.appendChild(span);
   banner.appendChild(btn);
   return banner;

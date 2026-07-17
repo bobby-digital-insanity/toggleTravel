@@ -204,6 +204,12 @@
         document.getElementById('dest-content').style.display = '';
         updateTotalPrice();
         if (id === 'dest-013') applyAtlantisBookingFlag();
+        // destination-view: reward metric for the search-ranking MAB. Fired
+        // after LD init so it attributes to the search-ranking variation the
+        // user was bucketed into on the search page.
+        LDFlags.ready.then(() => {
+          try { LDFlags.track('destination-view', { destination_id: id }); } catch (_) { /* ignore */ }
+        });
       } catch (err) {
         document.getElementById('dest-loading').innerHTML =
           `<div class="alert alert-error">${err.status === 404 ? 'Destination not found.' : `Error: ${err.message}`}</div>`;

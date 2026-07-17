@@ -76,6 +76,19 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function jitter(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+// Read the live experiment/MAB flag values from the page so flows can bias
+// their reward actions — producing a decisive winner (Free Upgrade for the
+// promo experiment, Trending for the search-ranking MAB) instead of noisy ties.
+async function readActiveFlags(page) {
+  try {
+    await page.waitForFunction(() => window.LDFlags && window.LDFlags.get, { timeout: 4000 });
+    return await page.evaluate(() => ({
+      promo: window.LDFlags.get('promo-banner-text') || '',
+      ranking: window.LDFlags.get('search-ranking') || 'recommended',
+    }));
+  } catch { return { promo: '', ranking: 'recommended' }; }
+}
+
 /** Push LD Session Replay data before the browser closes (headless skips real unload). */
 async function flushLdSessionReplay(page, persona) {
   try {
@@ -322,10 +335,12 @@ async function windowShopper(page, browserLabel, persona) {
   await maybeClickBanner(page);
   await sleep(jitter(800, 1400));
 
-  // Click 3–4 destination cards
+  // MAB reward bias: "trending" shoppers browse more destinations (more
+  // destination-view rewards) → the bandit converges on trending.
+  const { ranking } = await readActiveFlags(page);
   const cards = page.locator('#results-grid a.card');
   const count = await cards.count();
-  const toView = Math.min(jitter(3, 4), count);
+  const toView = Math.min(ranking === 'trending' ? jitter(3, 5) : jitter(1, 2), count);
 
   for (let i = 0; i < toView; i++) {
     t = Date.now();
@@ -497,8 +512,11 @@ async function completeBooking(page, browserLabel, persona) {
   await maybeClickBanner(page);
   await waitForSearchResults(page).catch(() => {});
 
-  // Click first destination
-  const card = page.locator('#results-grid a.card').first();
+  const { promo } = await readActiveFlags(page);
+
+  // Click the first NON-Atlantis destination — Atlantis 404s on its own, which
+  // would mask the promo experiment's booking-conversion signal.
+  const card = page.locator('#results-grid a.card[data-id]:not([data-id="dest-013"])').first();
   if (!(await card.isVisible({ timeout: 5000 }).catch(() => false))) {
     warn('No destination cards found, skipping booking flow');
     return;
@@ -565,7 +583,12 @@ async function completeBooking(page, browserLabel, persona) {
     return;
   }
 
-  // Step 3: confirm
+  // Step 3: confirm — promo experiment reward bias. Free Upgrade users almost
+  // always complete the booking (fire confirm-booking); others abandon at the
+  // payment step ~45% of the time → Free Upgrade wins on booking-conversion.
+  const willComplete = /upgrade/i.test(promo) ? Math.random() < 0.9 : Math.random() < 0.55;
+  if (!willComplete) { log('→ abandoned at payment step'); return; }
+
   const confirmBtn = page.locator('#confirm-btn');
   await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
   if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
