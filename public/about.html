@@ -130,6 +130,40 @@
       align-items: center;
       gap: 6px;
     }
+
+    /* Getting started */
+    .gs-wrap { max-width: 760px; margin: 40px auto 0; }
+    .gs-step { margin-bottom: 28px; }
+    .gs-step h3 { font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; gap: 10px; align-items: baseline; }
+    .gs-step h3 .gs-num { color: #405BFF; font-weight: 800; }
+    .gs-step p { color: var(--text-muted); font-size: .9rem; line-height: 1.65; margin: 6px 0 0; }
+    .gs-step p a { color: #405BFF; font-weight: 600; }
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      font-size: .8rem;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      line-height: 1.65;
+      overflow-x: auto;
+      margin: 12px 0 0;
+    }
+    .code-comment { color: #64748b; }
+    .code-key { color: #7dd3fc; }
+    .code-str { color: #86efac; }
+    .code-fn { color: #fbbf24; }
+    .gs-note {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e3a8a;
+      border-radius: var(--radius-sm);
+      padding: 16px 18px;
+      font-size: .86rem;
+      line-height: 1.6;
+      margin-top: 8px;
+    }
+    .gs-note code { background: rgba(30,64,175,.1); padding: 1px 5px; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -247,6 +281,74 @@
         <div class="stack-pill">🏴 LD Feature Flag JS SDK</div>
         <div class="stack-pill">📝 Winston → LDTransport</div>
         <div class="stack-pill">🤖 Anthropic Claude (AI Planner)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GETTING STARTED -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Getting started</div>
+        <h2>Implementing a feature flag</h2>
+        <p>The five steps behind every flag in Toggle Travel. This is the real server-side code (<code>src/launchdarkly.js</code>) — the browser SDK works the same way.</p>
+      </div>
+
+      <div class="gs-wrap">
+
+        <div class="gs-step">
+          <h3><span class="gs-num">1.</span> Import the SDK</h3>
+          <p>Toggle Travel runs the LaunchDarkly Node server SDK, with the Observability plugin loaded alongside it.</p>
+          <div class="code-block">
+<span class="code-key">const</span> LaunchDarkly = <span class="code-fn">require</span>(<span class="code-str">'@launchdarkly/node-server-sdk'</span>);<br>
+<span class="code-key">const</span> { Observability } = <span class="code-fn">require</span>(<span class="code-str">'@launchdarkly/observability-node'</span>);
+          </div>
+        </div>
+
+        <div class="gs-step">
+          <h3><span class="gs-num">2.</span> Initialize the client</h3>
+          <p>This pulls flag data from LaunchDarkly's edge-based <a href="https://launchdarkly.com/blog/flag-delivery-at-edge/" target="_blank" rel="noopener">Flag Delivery Network</a> in under 200ms. The Observability plugin wires in traces, logs, and metrics at the same time.</p>
+          <div class="code-block">
+<span class="code-key">const</span> client = LaunchDarkly.<span class="code-fn">init</span>(process.env.LD_SDK_KEY, {<br>
+&nbsp;&nbsp;<span class="code-key">plugins</span>: [<span class="code-key">new</span> <span class="code-fn">Observability</span>({ <span class="code-key">serviceName</span>: <span class="code-str">'toggle-travel'</span> })],<br>
+});<br>
+<span class="code-key">await</span> client.<span class="code-fn">waitForInitialization</span>({ <span class="code-key">timeout</span>: <span class="code-str">5</span> });
+          </div>
+        </div>
+
+        <div class="gs-step">
+          <h3><span class="gs-num">3.</span> Build the context</h3>
+          <p>A context holds whatever you target on. Toggle Travel keys users by their session id, so the server and the browser evaluate the exact same context.</p>
+          <div class="code-block">
+<span class="code-key">const</span> context = { <span class="code-key">kind</span>: <span class="code-str">'user'</span>, <span class="code-key">key</span>: req.sessionId };
+          </div>
+        </div>
+
+        <div class="gs-step">
+          <h3><span class="gs-num">4.</span> Evaluate the flag</h3>
+          <p>Every request asks LaunchDarkly for the variation, passing a default. This is the checkout flag that drives the daily guarded release:</p>
+          <div class="code-block">
+<span class="code-key">const</span> useV2Checkout = <span class="code-key">await</span> client.<span class="code-fn">variation</span>(<span class="code-str">'new-checkout-flow'</span>, context, <span class="code-str">false</span>);<br>
+<br>
+<span class="code-key">if</span> (useV2Checkout) {<br>
+&nbsp;&nbsp;<span class="code-comment">// run the new checkout code path</span><br>
+}
+          </div>
+        </div>
+
+        <div class="gs-step">
+          <h3><span class="gs-num">5.</span> Track events</h3>
+          <p>Custom events feed metrics, experiments, and guarded-rollout guards. Toggle Travel fires these on booking outcomes:</p>
+          <div class="code-block">
+client.<span class="code-fn">track</span>(<span class="code-str">'confirm-booking'</span>, context, { <span class="code-key">destination_id</span> });<br>
+client.<span class="code-fn">track</span>(<span class="code-str">'booking-error'</span>, context, { <span class="code-key">http_status</span>: <span class="code-str">500</span> });
+          </div>
+        </div>
+
+        <div class="gs-note">
+          <strong>Same shape in the browser.</strong> The client SDK (<code>public/js/flags.js</code>) mirrors this: <code>LDClient.initialize(clientSideId, context, { plugins })</code>, then <code>ldClient.variation(key, default)</code> and <code>ldClient.track(event, data)</code> — plus the Session Replay plugin for recordings.
+        </div>
+
       </div>
     </div>
   </section>
