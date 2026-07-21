@@ -132,6 +132,7 @@
     }
 
     /* Getting started */
+    #getting-started { scroll-margin-top: 90px; }
     .gs-wrap { max-width: 760px; margin: 40px auto 0; }
     .gs-step { margin-bottom: 28px; }
     .gs-step h3 { font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; gap: 10px; align-items: baseline; }
@@ -199,6 +200,14 @@
       </div>
 
       <div class="use-case-grid">
+
+        <a href="#getting-started" class="use-case-card">
+          <div class="card-icon">🚀</div>
+          <div class="card-tag">Getting Started</div>
+          <h3>Implementing a Feature Flag</h3>
+          <p>The five steps behind every flag in Toggle Travel — import the SDK, initialize the client, build a context, evaluate the flag, and track events. The actual code, server and browser.</p>
+          <div class="card-cta">See the code →</div>
+        </a>
 
         <a href="/about/errors.html" class="use-case-card">
           <div class="card-icon">🚨</div>
@@ -286,12 +295,12 @@
   </section>
 
   <!-- GETTING STARTED -->
-  <section class="section">
+  <section class="section" id="getting-started">
     <div class="container">
       <div class="section-header">
         <div class="eyebrow">Getting started</div>
         <h2>Implementing a feature flag</h2>
-        <p>The five steps behind every flag in Toggle Travel. This is the real server-side code (<code>src/launchdarkly.js</code>) — the browser SDK works the same way.</p>
+        <p>The five steps behind every flag in Toggle Travel, modeled on the real Node server SDK code in <code>src/launchdarkly.js</code>. The browser SDK works the same way.</p>
       </div>
 
       <div class="gs-wrap">
@@ -318,9 +327,22 @@
 
         <div class="gs-step">
           <h3><span class="gs-num">3.</span> Build the context</h3>
-          <p>A context holds whatever you target on. Toggle Travel keys users by their session id, so the server and the browser evaluate the exact same context.</p>
+          <p>A context describes who (or what) you're evaluating for — and every attribute on it is something you can target, segment, or roll out by. Toggle Travel keys users by their session id (the stable randomization unit) and attaches loyalty tier, geo, and device so the same context works for targeting <em>and</em> experiment bucketing. Server and browser build it identically.</p>
           <div class="code-block">
-<span class="code-key">const</span> context = { <span class="code-key">kind</span>: <span class="code-str">'user'</span>, <span class="code-key">key</span>: req.sessionId };
+<span class="code-key">const</span> context = {<br>
+&nbsp;&nbsp;<span class="code-key">kind</span>: <span class="code-str">'multi'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">user</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">key</span>: req.sessionId,&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment">// stable randomization unit</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">name</span>: user.name,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">anonymous</span>: !user.loggedIn,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">plan</span>: user.plan,&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment">// 'Gold' | 'Diamond' — target by loyalty tier</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">country</span>: req.geo.country,<br>
+&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;<span class="code-key">device</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">key</span>: req.deviceId,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">platform</span>: req.platform,&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment">// 'web' | 'ios' | 'android'</span><br>
+&nbsp;&nbsp;},<br>
+};
           </div>
         </div>
 
