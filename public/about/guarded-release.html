@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guarded Release — About Toggle Travel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .page-hero { background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%); color: #fff; padding: 64px 24px 56px; }
+    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 500; opacity: .7; margin-bottom: 24px; }
+    .breadcrumb a { color: #fff; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb-sep { opacity: .5; }
+    .page-hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 14px; line-height: 1.2; }
+    .page-hero p { font-size: 1.05rem; opacity: .85; max-width: 640px; line-height: 1.7; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .tag { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 4px 12px; font-size: .78rem; font-weight: 600; color: #fff; }
+    .content-section { padding: 56px 0; }
+    .content-section + .content-section { border-top: 1px solid var(--border); padding-top: 56px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+    .prose h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 16px; }
+    .prose h3 { font-size: 1.1rem; font-weight: 700; margin: 28px 0 10px; }
+    .prose p { color: var(--text-muted); line-height: 1.75; margin-bottom: 14px; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose strong { color: var(--text); }
+    .prose ul { color: var(--text-muted); line-height: 1.75; margin: 0 0 14px 20px; }
+    .prose li { margin-bottom: 6px; }
+    .prose a { color: var(--brand-primary); font-weight: 600; }
+    .callout { border-radius: var(--radius); padding: 20px 24px; margin: 24px 0; display: flex; gap: 14px; align-items: flex-start; }
+    .callout-icon { font-size: 1.3rem; flex-shrink: 0; line-height: 1.4; }
+    .callout-body { flex: 1; }
+    .callout-body strong { display: block; margin-bottom: 4px; font-size: .95rem; }
+    .callout-body p { font-size: .88rem; line-height: 1.65; margin: 0; }
+    .callout--ld { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .callout--ld .callout-body strong { color: #1e40af; }
+    .callout--ld .callout-body p { color: #1e3a8a; }
+    .callout--code { background: var(--surface-2); border: 1px solid var(--border); }
+    .callout--code .callout-body strong { color: var(--text); }
+    .callout--code .callout-body p { color: var(--text-muted); }
+    .callout--warn { background: #fffbeb; border: 1px solid #fde68a; }
+    .callout--warn .callout-body strong { color: #92400e; }
+    .callout--warn .callout-body p { color: #78350f; }
+    .code-block { background: #0f172a; color: #e2e8f0; border-radius: var(--radius-sm); padding: 20px; font-size: .8rem; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; line-height: 1.65; overflow-x: auto; margin: 16px 0; }
+    .code-comment { color: #64748b; }
+    .code-key { color: #7dd3fc; }
+    .code-str { color: #86efac; }
+    .code-fn { color: #fbbf24; }
+    .doc-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 4px; }
+    .doc-link { display: inline-flex; align-items: center; gap: 7px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 999px; padding: 6px 14px; font-size: .8rem; font-weight: 600; text-decoration: none; transition: all var(--transition); }
+    .doc-link:hover { background: #dbeafe; text-decoration: none; }
+    .img-placeholder { border: 2px dashed var(--border); border-radius: var(--radius); background: var(--surface-2); aspect-ratio: 16 / 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-light); text-align: center; padding: 24px; margin: 20px 0 6px; }
+    .img-placeholder .ph-icon { font-size: 2rem; opacity: .5; }
+    .img-placeholder .ph-label { font-size: .85rem; font-weight: 700; color: var(--text-muted); }
+    .img-placeholder .ph-hint { font-size: .75rem; }
+    .img-caption { font-size: .75rem; color: var(--text-light); text-align: center; margin-bottom: 20px; }
+    .accordion { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 16px; overflow: hidden; box-shadow: var(--shadow-sm); }
+    .accordion summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 14px; padding: 20px 24px; user-select: none; }
+    .accordion summary::-webkit-details-marker { display: none; }
+    .accordion summary:hover { background: var(--surface-2); }
+    .acc-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; background: #eef2ff; }
+    .acc-title { flex: 1; }
+    .acc-title strong { display: block; font-size: 1.02rem; font-weight: 700; }
+    .acc-title span { font-size: .82rem; color: var(--text-muted); }
+    .acc-chevron { font-size: .9rem; color: var(--text-light); transition: transform var(--transition); flex-shrink: 0; }
+    .accordion[open] .acc-chevron { transform: rotate(180deg); }
+    .accordion[open] summary { border-bottom: 1px solid var(--border); }
+    .acc-body { padding: 24px; }
+    .acc-body .prose h3:first-child { margin-top: 0; }
+    .try-it-banner { background: linear-gradient(135deg, #405BFF 0%, #6366f1 100%); border-radius: var(--radius); padding: 32px 36px; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+    .try-it-banner h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+    .try-it-banner p { opacity: .85; font-size: .9rem; margin: 0; }
+    .try-it-banner .btn-white { background: #fff; color: #405BFF; font-weight: 700; padding: 10px 22px; border-radius: 999px; font-size: .9rem; white-space: nowrap; text-decoration: none; flex-shrink: 0; }
+    .try-it-banner .btn-white:hover { opacity: .9; text-decoration: none; }
+    .flow-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+    .flow-step { display: flex; align-items: flex-start; gap: 16px; position: relative; }
+    .flow-step + .flow-step { margin-top: 20px; }
+    .flow-step + .flow-step::before { content: ''; position: absolute; left: 19px; top: -20px; width: 2px; height: 20px; background: var(--border); }
+    .flow-num { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; flex-shrink: 0; }
+    .flow-num--blue { background: #dbeafe; color: #1d4ed8; }
+    .flow-num--purple { background: #ede9fe; color: #6d28d9; }
+    .flow-num--red { background: #fee2e2; color: #b91c1c; }
+    .flow-num--green { background: #d1fae5; color: #065f46; }
+    .flow-text strong { display: block; font-size: .9rem; font-weight: 700; margin-bottom: 3px; }
+    .flow-text span { font-size: .82rem; color: var(--text-muted); line-height: 1.5; }
+    .persona-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); font-size: .88rem; margin: 32px 0; }
+    .persona-table th { text-align: left; background: #1e1b4b; color: #fff; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 14px 18px; }
+    .persona-table td { padding: 16px 18px; border-top: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+    .persona-table td:first-child { white-space: nowrap; }
+    .persona-table tr:nth-child(even) td { background: var(--surface-2); }
+    .persona-role { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); }
+    .persona-table td:not(:first-child) { color: var(--text-muted); }
+    @media (max-width: 768px) { .persona-table { display: block; overflow-x: auto; } .persona-table td:first-child { white-space: normal; } }
+    .win-story { background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%); border-radius: var(--radius); color: #fff; padding: 36px 40px; display: grid; grid-template-columns: auto 1fr auto; gap: 32px; align-items: center; margin-top: 40px; }
+    @media (max-width: 768px) { .win-story { grid-template-columns: 1fr; text-align: center; } }
+    .win-stat { text-align: center; }
+    .win-stat .num { font-size: 2.6rem; font-weight: 900; line-height: 1; }
+    .win-stat .label { font-size: .75rem; font-weight: 600; opacity: .75; margin-top: 6px; max-width: 130px; }
+    .win-body .eyebrow-light { font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .65; margin-bottom: 8px; }
+    .win-body h3 { font-size: 1.25rem; font-weight: 800; margin-bottom: 10px; }
+    .win-body p { font-size: .9rem; line-height: 1.7; opacity: .88; margin: 0; }
+    .win-story .btn-white { background: #fff; color: #3730a3; font-weight: 700; padding: 10px 22px; border-radius: 999px; font-size: .88rem; white-space: nowrap; text-decoration: none; }
+    .win-story .btn-white:hover { opacity: .9; text-decoration: none; }
+    img.lightboxable { cursor: zoom-in; transition: box-shadow var(--transition), transform var(--transition); }
+    img.lightboxable:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+    #lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 18, 42, .93); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 36px; opacity: 0; pointer-events: none; transition: opacity .18s ease; cursor: zoom-out; }
+    #lightbox.open { opacity: 1; pointer-events: auto; }
+    #lightbox img { max-width: min(1680px, 94vw); max-height: 84vh; border-radius: var(--radius); box-shadow: 0 24px 80px rgba(0, 0, 0, .55); transform: scale(.97); transition: transform .18s ease; }
+    #lightbox.open img { transform: scale(1); }
+    #lightbox-caption { color: rgba(255, 255, 255, .78); font-size: .88rem; text-align: center; max-width: 820px; line-height: 1.5; }
+    #lightbox-close { position: absolute; top: 20px; right: 24px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25); color: #fff; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s ease; }
+    #lightbox-close:hover { background: rgba(255, 255, 255, .25); }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">Toggle<span>Travel</span></a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/search.html">Destinations</a></li>
+        <li><a href="/bookings.html">My Trips</a></li>
+        <li><a href="/ai-planner">AI Planner</a></li>
+        <li><a href="/about.html">About</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb">
+        <a href="/about.html">About</a>
+        <span class="breadcrumb-sep">/</span>
+        <span>Guarded Release</span>
+      </div>
+      <h1>🛡 Guarded Release:<br>ship, watch, auto-roll-back</h1>
+      <p>Roll a change out to a slice of live traffic, let LaunchDarkly watch a metric you care about, and if the new version regresses, it rolls itself back — automatically, in minutes, before most users ever notice.</p>
+      <div class="tag-row">
+        <span class="tag">🔵 LD Guarded rollouts</span>
+        <span class="tag">📉 Guarded by a metric</span>
+        <span class="tag">⏪ Automatic rollback</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section class="content-section">
+    <div class="container">
+      <div class="two-col">
+        <div class="prose">
+          <h2>What a guarded release is</h2>
+          <p>A normal flag flip is all-or-nothing: you turn a feature on and hope. A <strong>guarded release</strong> turns that hope into a safety net. You ship the new version to a percentage of users, keep the rest on the known-good version as a <strong>control</strong>, and point LaunchDarkly at a metric — error rate, latency, conversions.</p>
+          <p>LaunchDarkly compares the two groups in real time. If the new version is measurably worse, it <strong>reverts to the safe version on its own</strong> and tells you why. No pager, no war room, no scramble to remember how to undo the deploy.</p>
+          <p>The difference from a plain rollback: the software decides, using data, in the time it takes to read this sentence — and it only ever exposes the change to a fraction of people while it's unsure.</p>
+          <div class="callout callout--ld">
+            <div class="callout-icon">🛡</div>
+            <div class="callout-body">
+              <strong>Deploy is not release</strong>
+              <p>Code ships dark, then a guarded release decides — on evidence — whether it's safe to keep. A bad change is caught by the metric, not by a customer tweet.</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <!-- Replace with a screenshot: <img src="/images/guarded-release/gr-monitoring.png" ...> -->
+          <div class="img-placeholder">
+            <div class="ph-icon">📸</div>
+            <div class="ph-label">Screenshot placeholder: Monitoring tab</div>
+            <div class="ph-hint">Flag → Monitoring: the guarded release with treatment/control arms, the guard metric, and "rolled back automatically" banner</div>
+          </div>
+          <p class="img-caption">A guarded release on the Monitoring tab, reverted after detecting a regression</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- USE CASES -->
+  <section class="content-section" style="background:var(--surface-2)">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Use cases</div>
+        <h2>Who sleeps better because of it</h2>
+        <p>A guarded release is a risk-reduction tool, so its value reads differently at every level of the org.</p>
+      </div>
+
+      <table class="persona-table">
+        <thead>
+          <tr>
+            <th>Persona</th>
+            <th>What they care about</th>
+            <th>How a guarded release delivers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="persona-role">👔 C-suite (CTO / CIO)</span></td>
+            <td>Uptime, brand risk, the cost of a bad release reaching customers</td>
+            <td>Bad changes are contained to a fraction of traffic and reverted automatically. "Move fast" stops being at odds with "don't break things" — you ship more <em>and</em> post higher availability.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">📊 VP Eng / Directors</span></td>
+            <td>Change-failure rate, MTTR, release throughput</td>
+            <td>The mean-time-to-recovery for a guarded change is measured in minutes and requires no human. Teams release far more often because the downside is capped.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">🚨 SRE / On-call</span></td>
+            <td>Fewer 2am pages, faster mitigation, less toil</td>
+            <td>The rollback happens before the alert would have fired. On-call reviews what LaunchDarkly already did instead of being woken to do it by hand.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">💻 Developers</span></td>
+            <td>Shipping without fear; reverting without a redeploy</td>
+            <td>Merge, ship behind the flag, let the guard watch. If it's bad, it's off in minutes with no hotfix branch — the code is still deployed, just not served.</td>
+          </tr>
+          <tr>
+            <td><span class="persona-role">🧭 Product managers</span></td>
+            <td>Getting features to users safely, protecting core funnels</td>
+            <td>Ship the new checkout to 50% guarded by the booking-error rate. If it hurts conversions, it never reaches the other half — the funnel is protected automatically.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="two-col">
+        <div class="prose">
+          <h3>In this demo app</h3>
+          <p>Every day at <strong>7am ET</strong>, Toggle Travel "deploys" a new checkout that fails every payment. It ships as a guarded release to 50% of live traffic, guarded by the <code>booking-error</code> metric. Within minutes the treatment arm's errors spike, LaunchDarkly detects the regression against the healthy control arm, and <strong>reverts to the stable checkout automatically</strong> — while session replay captures real users hitting the failure. No human touches it.</p>
+        </div>
+        <div>
+          <!-- Replace with: <img src="/images/guarded-release/gr-rollback.png" ...> -->
+          <div class="img-placeholder">
+            <div class="ph-icon">📸</div>
+            <div class="ph-label">Screenshot placeholder: Auto-rollback event</div>
+            <div class="ph-hint">Monitoring/flag history: "Default rule rolled back automatically after detecting a regression for Booking Errors"</div>
+          </div>
+          <p class="img-caption">The moment LaunchDarkly reverts the release on the booking-error regression</p>
+        </div>
+      </div>
+
+      <div class="win-story">
+        <div class="win-stat">
+          <div class="num">98%</div>
+          <div class="label">production deploy success rate</div>
+        </div>
+        <div class="win-body">
+          <div class="eyebrow-light">Customer win story</div>
+          <h3>Vodafone</h3>
+          <p>With LaunchDarkly, Vodafone releases continuously — around 363 times a month, up from once a quarter — at a 98% production success rate, and can resolve incidents immediately by flipping the flag rather than rolling back a deploy. Even shipping a record volume of change, the company posted its highest availability of the year.</p>
+        </div>
+        <a class="btn-white" href="https://launchdarkly.com/case-studies/vodafone/" target="_blank" rel="noopener">Read the case study →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEEP DIVE -->
+  <section class="content-section">
+    <div class="container">
+      <div class="section-header">
+        <div class="eyebrow">Deep dive</div>
+        <h2>How Toggle Travel uses it</h2>
+        <p>Expand each topic for real configuration and code from this app, with the LD docs to go deeper.</p>
+      </div>
+
+      <div style="max-width:860px;margin:40px auto 0">
+
+        <!-- HOW IT WORKS -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">🛡</div>
+            <div class="acc-title">
+              <strong>How a guarded release works</strong>
+              <span>Treatment vs control, a metric, and an automatic decision</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="flow-diagram" style="margin-bottom:20px">
+              <div class="flow-step">
+                <div class="flow-num flow-num--blue">1</div>
+                <div class="flow-text">
+                  <strong>Start the rollout</strong>
+                  <span>The new variation (treatment) is served to a slice of traffic; the rest stay on the current variation (control)</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--blue">2</div>
+                <div class="flow-text">
+                  <strong>Monitor a guard metric</strong>
+                  <span>LaunchDarkly watches a metric (here, booking errors) for each arm during a monitoring window</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--red">3</div>
+                <div class="flow-text">
+                  <strong>Detect a regression</strong>
+                  <span>If the treatment arm is statistically worse than control, that's a regression — no threshold-guessing required</span>
+                </div>
+              </div>
+              <div class="flow-step">
+                <div class="flow-num flow-num--green">4</div>
+                <div class="flow-text">
+                  <strong>Roll back automatically</strong>
+                  <span>The flag reverts to the control variation and logs why. Everyone is back on the safe version within minutes</span>
+                </div>
+              </div>
+            </div>
+            <div class="prose">
+              <p>The key idea is the <strong>control arm</strong>. A plain "turn it on for everyone" has nothing to compare against — you can only eyeball a dashboard. A guarded release always keeps a healthy control group, so the comparison is apples-to-apples and the rollback decision is statistical, not a hunch. This is why guarded rollouts <strong>cap the treatment at 50%</strong> — the other half is the yardstick.</p>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/releases/guarded-rollouts" target="_blank" rel="noopener">📘 Guarded rollouts</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/releases/regression-detection" target="_blank" rel="noopener">📘 Regression detection</a>
+            </div>
+          </div>
+        </details>
+
+        <!-- SETUP -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">⚙️</div>
+            <div class="acc-title">
+              <strong>Starting one: the flag, the metric, the rollout</strong>
+              <span>How the traffic conductor kicks off the release over the API</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>A guarded release needs three things: a flag with a control and a treatment variation, a metric to guard on, and the rollout itself. In this app the flag is <code>new-checkout-flow</code> (control = stable checkout, treatment = the buggy new one) and the metric is <code>booking-error</code>. The traffic conductor starts the release over the LaunchDarkly REST API with a semantic-patch instruction:</p>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// scripts/traffic-conductor.js — start a guarded rollout on the flag</span><br>
+{ <span class="code-key">kind</span>: <span class="code-str">'startAutomatedRelease'</span>, <span class="code-key">releaseKind</span>: <span class="code-str">'guarded'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">originalVariationId</span>: falseId, <span class="code-key">targetVariationId</span>: trueId,<br>
+&nbsp;&nbsp;<span class="code-key">randomizationUnit</span>: <span class="code-str">'user'</span>,<br>
+&nbsp;&nbsp;<span class="code-key">stages</span>: [{ <span class="code-key">allocation</span>: <span class="code-str">50000</span>, <span class="code-key">durationMillis</span>: <span class="code-str">300000</span> }], <span class="code-comment">// 50%, 5-min window</span><br>
+&nbsp;&nbsp;<span class="code-key">metrics</span>: [{ <span class="code-key">key</span>: <span class="code-str">'booking-error'</span>, <span class="code-key">isGroup</span>: <span class="code-str">false</span> }],<br>
+&nbsp;&nbsp;<span class="code-key">metricMonitoringPreferences</span>: { <span class="code-str">'booking-error'</span>: { <span class="code-key">autoRollback</span>: <span class="code-str">true</span> } } }
+            </div>
+            <div class="prose">
+              <p>Most teams do this with two clicks in the LaunchDarkly UI — the API path here just lets the demo re-arm itself every morning. Guarded rollouts can also be started, watched, and stopped entirely from the flag's <strong>Monitoring</strong> tab.</p>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/releases/guarded-rollouts" target="_blank" rel="noopener">📘 Guarded rollouts</a>
+              <a class="doc-link" href="https://launchdarkly.com/docs/api/flags/patch-feature-flag" target="_blank" rel="noopener">📘 Flag semantic patch API</a>
+            </div>
+            <!-- Replace with: <img src="/images/guarded-release/gr-setup.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder: Start a guarded rollout</div>
+              <div class="ph-hint">The "release" configuration on the Targeting/Monitoring tab: variations, allocation, guard metric, auto-rollback toggle</div>
+            </div>
+            <p class="img-caption">Configuring the guarded rollout: 50% treatment, guarded by Booking Errors, auto-rollback on</p>
+          </div>
+        </details>
+
+        <!-- THE GUARD METRIC -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">📉</div>
+            <div class="acc-title">
+              <strong>The guard metric</strong>
+              <span>What LaunchDarkly watches, and how the app feeds it</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>The guard is the <code>booking-error</code> metric — an occurrence metric where <strong>lower is better</strong>. When a checkout fails, the app fires the event, and LaunchDarkly attributes it to whichever arm that user was bucketed into. Because the treatment (new) checkout fails every time and control almost never does, the two arms diverge immediately.</p>
+              <p>Crucially, the event is fired against the <strong>same user context that evaluated the flag</strong>, so attribution is exact. This app fires it both server-side (so cheap API traffic feeds the guard) and client-side (so it also lands on the session-replay timeline):</p>
+            </div>
+            <div class="code-block">
+<span class="code-comment">// src/routes/bookings.js — server-side, same context that evaluated the flag</span><br>
+<span class="code-key">if</span> (useV2Checkout) {<br>
+&nbsp;&nbsp;<span class="code-fn">track</span>(<span class="code-str">'booking-error'</span>, req.sessionId, { <span class="code-key">http_status</span>: <span class="code-str">500</span> });<br>
+&nbsp;&nbsp;<span class="code-key">throw</span> <span class="code-fn">Error</span>(<span class="code-str">'CheckoutV2Error: payment intent missing'</span>); <span class="code-comment">// 500</span><br>
+}
+            </div>
+            <div class="callout callout--ld">
+              <div class="callout-icon">🔵</div>
+              <div class="callout-body">
+                <strong>Any metric can guard a release</strong>
+                <p>Errors are the obvious one, but you can guard on latency (p95), a custom conversion, or any metric in LaunchDarkly. The regression check compares treatment vs control on that metric.</p>
+              </div>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/observability/metrics" target="_blank" rel="noopener">📘 Metrics</a>
+            </div>
+          </div>
+        </details>
+
+        <!-- AUTO ROLLBACK -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">⏪</div>
+            <div class="acc-title">
+              <strong>Automatic rollback &amp; the control arm</strong>
+              <span>Why it reverts on its own, and why it never exceeds 50%</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>When the guard detects the treatment arm is worse, LaunchDarkly performs the rollback with no human in the loop: it sets the flag's rule to serve the <strong>control</strong> variation to everyone and records a "reverted automatically after detecting a regression" event. In this app that lands the flag back on the stable checkout, and the whole arc — start → spike → rollback — usually completes in a couple of minutes.</p>
+              <p>Because a guarded release requires a control group, treatment is <strong>capped at 50%</strong>. That's a feature, not a limit: it guarantees there's always a healthy population to measure against and to protect. The demo also keeps a time-based backstop that force-reverts if traffic is ever too low for the guard to reach significance — belt and suspenders.</p>
+            </div>
+            <div class="doc-links">
+              <a class="doc-link" href="https://launchdarkly.com/docs/home/releases/regression-detection" target="_blank" rel="noopener">📘 Regression detection &amp; auto-rollback</a>
+            </div>
+            <!-- Replace with: <img src="/images/guarded-release/gr-graph.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder: Booking-error regression graph</div>
+              <div class="ph-hint">Monitoring tab: the Booking Errors chart showing treatment far above control, with the rollback marker</div>
+            </div>
+            <p class="img-caption">Treatment-arm booking errors climb above the control arm, tripping the guard</p>
+          </div>
+        </details>
+
+        <!-- THE DAILY INCIDENT -->
+        <details class="accordion">
+          <summary>
+            <div class="acc-icon">🔥</div>
+            <div class="acc-title">
+              <strong>The daily 7am checkout incident</strong>
+              <span>The whole choreography, running unattended every morning</span>
+            </div>
+            <div class="acc-chevron">▼</div>
+          </summary>
+          <div class="acc-body">
+            <div class="prose">
+              <p>The demo runs the entire arc on its own, daily, against the 24/7 traffic:</p>
+              <ul>
+                <li><strong>7:00 ET</strong> — the conductor starts a guarded rollout of <code>new-checkout-flow</code> at 50%, guarded by <code>booking-error</code>.</li>
+                <li>Treatment-arm users get the new checkout and hit a <strong>"500 — Checkout Unavailable"</strong> screen; control-arm users check out normally.</li>
+                <li>A short <strong>checkout surge</strong> (cheap API traffic + a burst of real browser sessions) feeds the guard fast and records treatment-arm session replays of the failure.</li>
+                <li>LaunchDarkly detects the regression and <strong>rolls back to the stable checkout</strong>, typically within a couple of minutes.</li>
+                <li>The conductor re-arms clean for the next morning.</li>
+              </ul>
+              <p>Pair this page with <a href="/about/session-replay.html">Session Replay</a>: the treatment-arm failures are recorded, so you can watch a real user hit the broken checkout during the exact window the guard was deciding.</p>
+            </div>
+            <!-- Replace with: <img src="/images/guarded-release/gr-incident.png" ...> -->
+            <div class="img-placeholder">
+              <div class="ph-icon">📸</div>
+              <div class="ph-label">Screenshot placeholder: "500 — Checkout Unavailable"</div>
+              <div class="ph-hint">The app's booking page for a treatment-arm user: the red 500 banner + the "✨ NEW CHECKOUT" badge</div>
+            </div>
+            <p class="img-caption">What a treatment-arm user sees during the incident — the failure that trips the guard</p>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- TRY IT -->
+  <section class="content-section" style="background:var(--surface-2)">
+    <div class="container">
+      <div class="try-it-banner">
+        <div>
+          <h3>Watch the next rollback</h3>
+          <p>The incident fires daily at 7am ET. Open the flag's Monitoring tab to watch it live, or check the flag history afterward to see the automatic revert and the booking-error graph that caused it.</p>
+        </div>
+        <a href="/about/session-replay.html" class="btn-white">See the replays →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="nav-logo">Toggle<span style="color:var(--brand-accent)">Travel</span></div>
+        <p>The travel booking platform built for the modern explorer — and the modern ops team.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="/search.html">Destinations</a></li>
+          <li><a href="/bookings.html">My Trips</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>About</h4>
+        <ul>
+          <li><a href="/about.html">Overview</a></li>
+          <li><a href="/about/errors.html">Errors</a></li>
+          <li><a href="/about/session-replay.html">Session Replay</a></li>
+          <li><a href="/about/guarded-release.html">Guarded Release</a></li>
+          <li><a href="/about/experimentation.html">Experiments &amp; MAB</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Toggle Travel. Built for demos.</span>
+      <span>Powered by LaunchDarkly</span>
+    </div>
+  </footer>
+
+  <script src="/js/ldobservability.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/ldsessionreplay.min.js"></script>
+  <script src="/js/flags.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    // Lightbox: click any screenshot (once real images replace the placeholders) to view it full size.
+    (function () {
+      const overlay = document.createElement('div');
+      overlay.id = 'lightbox';
+      overlay.innerHTML = '<div id="lightbox-close" role="button" aria-label="Close">✕</div><img alt=""><div id="lightbox-caption"></div>';
+      document.body.appendChild(overlay);
+      const overlayImg = overlay.querySelector('img');
+      const captionEl = overlay.querySelector('#lightbox-caption');
+      function openLightbox(src, alt, caption) { overlayImg.src = src; overlayImg.alt = alt; captionEl.textContent = caption; overlay.classList.add('open'); document.body.style.overflow = 'hidden'; }
+      function closeLightbox() { overlay.classList.remove('open'); document.body.style.overflow = ''; }
+      overlay.addEventListener('click', closeLightbox);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlay.classList.contains('open')) closeLightbox(); });
+      function findCaption(img) {
+        const next = img.nextElementSibling;
+        if (next && next.classList && next.classList.contains('img-caption')) return next.textContent;
+        const parentNext = img.parentElement && img.parentElement.nextElementSibling;
+        if (parentNext && parentNext.classList && parentNext.classList.contains('img-caption')) return parentNext.textContent;
+        return img.alt || '';
+      }
+      document.querySelectorAll('img[src^="/images/guarded-release/"]').forEach((img) => {
+        img.classList.add('lightboxable');
+        img.addEventListener('click', () => openLightbox(img.src, img.alt, findCaption(img)));
+      });
+    })();
+  </script>
+</body>
+</html>

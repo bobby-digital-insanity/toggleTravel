@@ -71,6 +71,12 @@ app.get('/about/errors', (req, res) => {
 app.get('/about/session-replay', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'about', 'session-replay.html'));
 });
+app.get('/about/guarded-release', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'about', 'guarded-release.html'));
+});
+app.get('/about/experimentation', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'about', 'experimentation.html'));
+});
 
 // SPA fallback for client-side routing
 app.get('*', (req, res) => {
