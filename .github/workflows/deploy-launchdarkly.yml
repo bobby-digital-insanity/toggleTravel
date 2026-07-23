@@ -14,7 +14,7 @@ jobs:
       LD_SDK_KEY: ${{ secrets.LD_SDK_KEY_LD }}
       LD_CLIENT_SIDE_ID: ${{ secrets.LD_CLIENT_SIDE_ID_LD }}
       LD_API_TOKEN: ${{ secrets.LD_API_TOKEN_LD }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_LD }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_LD }}
 
     steps:
       - name: Deploy & Verify
@@ -24,7 +24,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_LD }}
           port: 22
-          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,ANTHROPIC_API_KEY
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,GEMINI_API_KEY
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -46,12 +46,12 @@ jobs:
             sed -i '/^LD_SDK_KEY=/d' .env
             sed -i '/^LD_CLIENT_SIDE_ID=/d' .env
             sed -i '/^LD_API_TOKEN=/d' .env
-            sed -i '/^ANTHROPIC_API_KEY=/d' .env
+            sed -i '/^GEMINI_API_KEY=/d' .env
             sed -i '/^DB_PATH=/d' .env
             echo "LD_SDK_KEY=$LD_SDK_KEY" >> .env
             echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
             echo "LD_API_TOKEN=$LD_API_TOKEN" >> .env
-            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
             echo "DB_PATH=/var/lib/toggle-travel/toggle.db" >> .env
 
             echo "=== Installing dependencies ==="

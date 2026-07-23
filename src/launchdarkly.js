@@ -3,6 +3,7 @@
 // Must be required before express in server.js for Observability auto-instrumentation
 const { Observability } = require('@launchdarkly/observability-node');
 const LaunchDarkly = require('@launchdarkly/node-server-sdk');
+const { initAi } = require('@launchdarkly/server-sdk-ai');
 const logger = require('./logger');
 
 // Initialize client synchronously on module load so the Observability plugin
@@ -13,6 +14,9 @@ let client = sdkKey
       plugins: [new Observability({ serviceName: 'toggle-travel' })],
     })
   : null;
+
+// AI SDK client wraps the base LD client — must come after `client` exists.
+const aiClient = client ? initAi(client) : null;
 
 async function init() {
   if (!client) {
@@ -32,6 +36,14 @@ async function getFlag(key, defaultValue, sessionId = 'anonymous') {
   const context = { kind: 'user', key: sessionId };
   return client.variation(key, context, defaultValue);
 }
+// AI Config (completion mode). The `ai-planner` config in LD is a completion
+// config, so we resolve it with completionConfig — model, params, and the
+// prompt messages come back already evaluated for this context.
+async function getCompletionConfig(key, defaultConfig, sessionId = 'anonymous', variables = {}) {
+  if (!aiClient) return null; // graceful degrade — route falls back to local defaults
+  const context = { kind: 'user', key: sessionId }; // same context shape as getFlag
+  return aiClient.completionConfig(key, context, defaultConfig, variables);
+}
 
 function getClientSideId() {
   return process.env.LD_CLIENT_SIDE_ID || null;
@@ -47,4 +59,4 @@ function track(eventName, sessionId = 'anonymous', data = undefined, metricValue
   }
 }
 
-module.exports = { init, getFlag, getClientSideId, track };
+module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig };

@@ -10,9 +10,10 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/genai": "^2.13.0",
     "@launchdarkly/node-server-sdk": "^9.10.11",
     "@launchdarkly/observability-node": "^1.1.1",
+    "@launchdarkly/server-sdk-ai": "^1.2.3",
     "better-sqlite3": "^12.10.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",

@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/main.css">
   <style>
-    .planner-wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 56px; }
+    .planner-wrap { max-width: 760px; margin: 0 auto; padding: 32px 24px 56px; }
 
     .planner-header { margin-bottom: 24px; }
     .planner-header h1 { font-size: 2.2rem; font-weight: 900; letter-spacing: -.8px; margin-bottom: 6px; }
@@ -25,6 +25,31 @@
       height: 560px;
     }
 
+    .model-banner {
+      padding: 10px 16px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .mb-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .mb-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.15);
+      flex-shrink: 0;
+    }
+    .mb-dot.off { background: var(--text-light); box-shadow: 0 0 0 3px rgba(148,163,184,.15); }
+    .mb-label { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+    .mb-model { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9rem; font-weight: 700; color: var(--text); }
+    .mb-config { margin-left: auto; font-size: .68rem; color: var(--text-light); }
+    .mb-params { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mb-pill {
+      background: white; border: 1px solid var(--border); border-radius: 999px;
+      padding: 3px 10px; font-size: .74rem; color: var(--text-muted);
+    }
+    .mb-pill b { color: var(--text); font-weight: 700; }
+
     .chat-window {
       flex: 1;
       overflow-y: auto;
@@ -32,12 +57,12 @@
       background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
     }
 
-    .msg { display: flex; flex-direction: column; gap: 4px; max-width: 78%; }
-    .msg.user { align-self: flex-end; align-items: flex-end; }
-    .msg.assistant { align-self: flex-start; align-items: flex-start; }
+    .msg { display: flex; max-width: 80%; }
+    .msg.user { align-self: flex-end; }
+    .msg.assistant { align-self: flex-start; }
 
     .msg-bubble {
       padding: 12px 16px;
@@ -60,23 +85,6 @@
       box-shadow: var(--shadow-sm);
     }
 
-    .agent-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 2px 10px;
-      border-radius: 999px;
-      font-size: .68rem;
-      font-weight: 700;
-      letter-spacing: .4px;
-      text-transform: uppercase;
-      background: rgba(64, 91, 255, .1);
-      color: #405BFF;
-    }
-    .agent-badge.booking { background: rgba(245, 158, 11, .12); color: #b45309; }
-    .agent-badge.recommendation { background: rgba(16, 185, 129, .12); color: #047857; }
-    .agent-badge.intent { background: rgba(100, 116, 139, .12); color: #475569; }
-
     .typing {
       display: inline-flex;
       gap: 4px;
@@ -88,9 +96,7 @@
       box-shadow: var(--shadow-sm);
     }
     .typing span {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
+      width: 7px; height: 7px; border-radius: 50%;
       background: var(--text-light);
       animation: typingDot 1.2s ease-in-out infinite;
     }
@@ -134,27 +140,6 @@
     .composer button:hover:not(:disabled) { background: var(--brand-secondary); }
     .composer button:disabled { opacity: .5; cursor: not-allowed; }
 
-    .hint-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 16px;
-    }
-    .hint-chip {
-      background: white;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 6px 14px;
-      font-size: .82rem;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all var(--transition);
-    }
-    .hint-chip:hover {
-      border-color: var(--brand-primary);
-      color: var(--brand-primary);
-    }
-
     .planner-error {
       background: rgba(239, 68, 68, .08);
       border: 1px solid rgba(239, 68, 68, .25);
@@ -174,24 +159,9 @@
       padding: 72px 32px;
       text-align: center;
     }
-    .coming-soon-icon {
-      font-size: 3rem;
-      margin-bottom: 12px;
-      display: block;
-    }
-    .coming-soon-card h2 {
-      font-size: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -.4px;
-      margin-bottom: 10px;
-    }
-    .coming-soon-card p {
-      color: var(--text-muted);
-      font-size: 1rem;
-      max-width: 380px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }
+    .coming-soon-icon { font-size: 3rem; margin-bottom: 12px; display: block; }
+    .coming-soon-card h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.4px; margin-bottom: 10px; }
+    .coming-soon-card p { color: var(--text-muted); font-size: 1rem; max-width: 380px; margin: 0 auto; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -209,42 +179,47 @@
     </div>
   </nav>
 
-  <div class="planner-wrap">
+  <main class="planner-wrap">
     <div class="planner-header">
-      <div class="eyebrow" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--brand-primary);margin-bottom:8px">Multi-Agent Pipeline</div>
       <h1>AI Travel Planner</h1>
-      <p>Plan your next trip with our AI Travel Planner — powered by Anthropic and orchestrated by LaunchDarkly AgentControl.</p>
+      <p>Plan your next trip with our AI assistant — powered by Google Gemini.</p>
     </div>
 
+    <!-- Enabled view: shown only when the ai-planner-enabled flag resolves true.
+         Starts hidden so the default state never flashes before LD resolves. -->
     <div id="planner-enabled-view" hidden>
       <div class="chat-card">
+        <!-- Model banner: shows the model + params from the LD AI Config (ai-planner). -->
+        <div class="model-banner" id="model-banner">
+          <div class="mb-head">
+            <span class="mb-dot" id="mb-dot"></span>
+            <span class="mb-label">Model</span>
+            <span class="mb-model" id="mb-model">loading…</span>
+            <span class="mb-config" id="mb-config"></span>
+          </div>
+          <div class="mb-params" id="mb-params"></div>
+        </div>
         <div class="chat-window" id="chat-window">
           <div class="msg assistant">
-            <span class="agent-badge">Concierge</span>
-            <div class="msg-bubble">Hi! I'm your AI travel planner. Tell me where you'd like to go (and where you're flying from), your dates, and your budget — I'll find flights and walk you through booking. What sounds good?</div>
+            <div class="msg-bubble">Hi! I'm your AI travel planner. Tell me where you'd like to go, your dates, and your budget — and I'll help you plan it. What sounds good?</div>
           </div>
         </div>
         <form class="composer" id="composer">
-          <input id="composer-input" type="text" placeholder="e.g. I want to fly from Denver to Miami next month, budget $400" autocomplete="off">
+          <input id="composer-input" type="text" placeholder="e.g. A warm beach trip in December, budget $1500" autocomplete="off">
           <button id="composer-send" type="submit">Send</button>
         </form>
-      </div>
-
-      <div class="hint-row">
-        <button class="hint-chip" data-prompt="I want to fly from Denver to Miami next month, budget $400">✈ Denver → Miami, $400</button>
-        <button class="hint-chip" data-prompt="Find me a weekend flight from SFO to NYC under $300">🗽 SFO → NYC weekend</button>
-        <button class="hint-chip" data-prompt="I'm thinking Tokyo in March — flexible budget">🗼 Tokyo in March</button>
       </div>
 
       <div id="planner-error" class="planner-error"></div>
     </div>
 
+    <!-- Disabled view: shown when the flag is off (or LD is unreachable). -->
     <div id="planner-disabled-view" class="coming-soon-card" hidden>
       <span class="coming-soon-icon">✨</span>
       <h2>Coming Soon</h2>
-      <p>The AI Travel Planner is currently unavailable. Check back soon!</p>
+      <p>The AI Travel Planner isn't available just yet. Check back soon!</p>
     </div>
-  </div>
+  </main>
 
   <footer class="footer">
     <div class="footer-inner">
@@ -255,7 +230,7 @@
     </div>
     <div class="footer-bottom">
       <span>© 2026 Toggle Travel</span>
-      <span>Powered by Claude AI</span>
+      <span>Powered by Google Gemini</span>
     </div>
   </footer>
 
@@ -275,6 +250,10 @@
         disabledView.hidden = !!enabled;
       }
 
+      // Gate the page on ai-planner-enabled. Both views start hidden, so
+      // nothing renders until LD resolves — no flash of the default state.
+      // In LD, ai-planner-enabled has ai-planner-api as a prerequisite, so the
+      // chat UI can't appear unless the backend API flag is also enabled.
       (async () => {
         await LDFlags.init();
         applyFlag(LDFlags.get('ai-planner-enabled'));
@@ -287,6 +266,8 @@
       const sendBtn = document.getElementById('composer-send');
       const errEl = document.getElementById('planner-error');
 
+      // Stable session key, reused as the x-session-id header so the server
+      // evaluates flags against the same context this browser uses.
       const sessionId = (function () {
         let id = localStorage.getItem('tt-session-id');
         if (!id) {
@@ -296,27 +277,50 @@
         return id;
       })();
 
-      // Conversation history sent to the server on every turn (server is stateless)
-      const history = [];
+      // ── Model banner ────────────────────────────────────────────────────
+      // Shows the model + all parameters currently served by the LD AI Config
+      // (ai-planner). Loaded from /api/ai-planner/config, refreshed on a poll so
+      // live changes in LaunchDarkly appear, and updated from each chat reply's
+      // meta so it always reflects exactly what was used.
+      const mbModel  = document.getElementById('mb-model');
+      const mbParams = document.getElementById('mb-params');
+      const mbConfig = document.getElementById('mb-config');
+      const mbDot    = document.getElementById('mb-dot');
 
-      function badgeClassFor(agent) {
-        if (!agent) return '';
-        const a = agent.toLowerCase();
-        if (a.includes('booking')) return 'booking';
-        if (a.includes('recommendation')) return 'recommendation';
-        if (a.includes('intent')) return 'intent';
-        return '';
+      function renderBanner(meta) {
+        if (!meta) return;
+        if (meta.model) mbModel.textContent = meta.model;
+        if (meta.configKey) mbConfig.textContent = 'LD AI Config: ' + meta.configKey;
+        if (typeof meta.enabled === 'boolean') mbDot.classList.toggle('off', !meta.enabled);
+        const params = meta.parameters || {};
+        mbParams.innerHTML = '';
+        Object.keys(params).forEach((key) => {
+          const pill = document.createElement('span');
+          pill.className = 'mb-pill';
+          pill.appendChild(document.createTextNode(key + ': '));
+          const val = document.createElement('b');
+          val.textContent = String(params[key]);
+          pill.appendChild(val);
+          mbParams.appendChild(pill);
+        });
       }
 
-      function appendMessage({ role, content, agent }) {
+      async function loadConfig() {
+        try {
+          const res = await fetch('/api/ai-planner/config', { headers: { 'x-session-id': sessionId } });
+          if (res.ok) renderBanner(await res.json());
+        } catch { /* leave last-known values on the banner */ }
+      }
+      loadConfig();
+      setInterval(loadConfig, 10000); // reflect live LD AI Config changes
+
+      // The server is stateless — the browser holds the conversation and
+      // sends the full history on every turn.
+      const history = [];
+
+      function appendMessage(role, content) {
         const wrap = document.createElement('div');
         wrap.className = 'msg ' + role;
-        if (role === 'assistant' && agent) {
-          const badge = document.createElement('span');
-          badge.className = 'agent-badge ' + badgeClassFor(agent);
-          badge.textContent = agent;
-          wrap.appendChild(badge);
-        }
         const bubble = document.createElement('div');
         bubble.className = 'msg-bubble';
         bubble.textContent = content;
@@ -329,10 +333,7 @@
         const wrap = document.createElement('div');
         wrap.className = 'msg assistant';
         wrap.id = 'typing-indicator';
-        const typing = document.createElement('div');
-        typing.className = 'typing';
-        typing.innerHTML = '<span></span><span></span><span></span>';
-        wrap.appendChild(typing);
+        wrap.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
         win.appendChild(wrap);
         win.scrollTop = win.scrollHeight;
       }
@@ -350,7 +351,7 @@
 
       async function send(message) {
         if (!message || !message.trim()) return;
-        appendMessage({ role: 'user', content: message });
+        appendMessage('user', message);
         history.push({ role: 'user', content: message });
         input.value = '';
         input.disabled = true;
@@ -360,12 +361,8 @@
         try {
           const res = await fetch('/api/ai-planner/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message,
-              conversationHistory: history,
-              sessionId,
-            }),
+            headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+            body: JSON.stringify({ message, conversationHistory: history }),
           });
           hideTyping();
           if (!res.ok) {
@@ -374,11 +371,9 @@
             return;
           }
           const data = await res.json();
-          appendMessage({ role: 'assistant', content: data.reply, agent: data.agentUsed });
+          appendMessage('assistant', data.reply);
           history.push({ role: 'assistant', content: data.reply });
-          if (data.done) {
-            input.placeholder = 'Booking complete — start a new conversation';
-          }
+          if (data.meta) renderBanner(data.meta); // keep banner exact to what was used
         } catch (err) {
           hideTyping();
           showError('Network error: ' + err.message);
@@ -392,12 +387,6 @@
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         send(input.value);
-      });
-
-      document.querySelectorAll('.hint-chip').forEach((chip) => {
-        chip.addEventListener('click', () => {
-          send(chip.getAttribute('data-prompt'));
-        });
       });
     })();
   </script>

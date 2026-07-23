@@ -16,7 +16,7 @@ window.LDFlags = (function () {
     'featured-destinations':      [],
     'booking-flow-variant':       'standard',
     'promo-banner-text':          '',
-    'ai-planner-enabled':         true,
+    'ai-planner-enabled':         false,
     'atlantis-booking-enabled':   false,
     'new-checkout-flow':          false,
     'search-ranking':             'recommended',

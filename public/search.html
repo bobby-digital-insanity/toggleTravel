@@ -233,8 +233,7 @@
           existing.remove();
         }
       }
-      // Apply default immediately, then re-apply with real flag value once LD is ready
-      update(LDFlags.get('atlantis-booking-enabled'));
+      // Defer to LDFlags.ready so we never paint the default state first (avoids FOUC)
       LDFlags.ready.then(() => {
         update(LDFlags.get('atlantis-booking-enabled'));
         LDFlags.onChange('atlantis-booking-enabled', update);

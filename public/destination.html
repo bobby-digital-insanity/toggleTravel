@@ -282,8 +282,11 @@
           : 'This destination is temporarily unavailable.';
       }
 
-      update(LDFlags.get('atlantis-booking-enabled'));
-      LDFlags.onChange('atlantis-booking-enabled', update);
+      // Defer to LDFlags.ready so we never paint the default state first (avoids FOUC)
+      LDFlags.ready.then(() => {
+        update(LDFlags.get('atlantis-booking-enabled'));
+        LDFlags.onChange('atlantis-booking-enabled', update);
+      });
     }
   </script>
 </body>
