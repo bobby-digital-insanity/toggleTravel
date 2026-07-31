@@ -3,7 +3,7 @@
 // Must be required before express in server.js for Observability auto-instrumentation
 const { Observability } = require('@launchdarkly/observability-node');
 const LaunchDarkly = require('@launchdarkly/node-server-sdk');
-const { initAi } = require('@launchdarkly/server-sdk-ai');
+const { initAi, LDFeedbackKind } = require('@launchdarkly/server-sdk-ai');
 const logger = require('./logger');
 
 // Initialize client synchronously on module load so the Observability plugin
@@ -39,10 +39,34 @@ async function getFlag(key, defaultValue, sessionId = 'anonymous') {
 // AI Config (completion mode). The `ai-planner` config in LD is a completion
 // config, so we resolve it with completionConfig — model, params, and the
 // prompt messages come back already evaluated for this context.
-async function getCompletionConfig(key, defaultConfig, sessionId = 'anonymous', variables = {}) {
+// `context` is a full LD context (e.g. { kind:'user', key, name, tier }) so the
+// AI Config can target/bucket on the signed-in identity — not just a session id.
+async function getCompletionConfig(key, defaultConfig, context, variables = {}) {
   if (!aiClient) return null; // graceful degrade — route falls back to local defaults
-  const context = { kind: 'user', key: sessionId }; // same context shape as getFlag
   return aiClient.completionConfig(key, context, defaultConfig, variables);
+}
+
+// AI Config (judge mode). Same pattern as completion configs — the judge's
+// model + evaluation rubric live in LD. `variables` fills Mustache placeholders
+// in the rubric (e.g. {{message}}, {{response}}).
+async function getJudgeConfig(key, defaultConfig, context, variables = {}) {
+  if (!aiClient) return null;
+  return aiClient.judgeConfig(key, context, defaultConfig, variables);
+}
+
+// Record deferred thumbs up/down feedback. The browser sends back the tracker's
+// resumptionToken (from the original /chat run); we reconstruct the tracker so
+// the feedback attributes to the same run/variation — works across PM2 workers.
+function recordFeedback(resumptionToken, context, kind = 'up') {
+  if (!aiClient || !resumptionToken) return false;
+  try {
+    const tracker = aiClient.createTracker(resumptionToken, context);
+    tracker.trackFeedback({ kind: kind === 'down' ? LDFeedbackKind.Negative : LDFeedbackKind.Positive });
+    return true;
+  } catch (err) {
+    logger.warn('ai_planner_feedback_failed', { error: err.message });
+    return false;
+  }
 }
 
 function getClientSideId() {
@@ -59,4 +83,4 @@ function track(eventName, sessionId = 'anonymous', data = undefined, metricValue
   }
 }
 
-module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig };
+module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig, getJudgeConfig, recordFeedback };

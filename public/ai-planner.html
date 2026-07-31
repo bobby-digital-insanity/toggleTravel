@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/main.css">
   <style>
-    .planner-wrap { max-width: 760px; margin: 0 auto; padding: 32px 24px 56px; }
+    .planner-wrap { max-width: 920px; margin: 0 auto; padding: 32px 24px 56px; }
 
     .planner-header { margin-bottom: 24px; }
     .planner-header h1 { font-size: 2.2rem; font-weight: 900; letter-spacing: -.8px; margin-bottom: 6px; }
@@ -22,7 +22,8 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      height: 560px;
+      /* Fill most of the viewport so dev-mode metadata blocks have room. */
+      height: clamp(560px, 72vh, 940px);
     }
 
     .model-banner {
@@ -50,6 +51,80 @@
     }
     .mb-pill b { color: var(--text); font-weight: 700; }
 
+    .demo-row {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: white;
+    }
+
+    /* Dev mode toggle (in the model banner) */
+    .dev-toggle {
+      margin-left: 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .dev-toggle:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+    .dev-toggle.active { background: #0f172a; border-color: #0f172a; color: #7dd3fc; }
+
+    /* Behind-the-scenes metadata blocks — rendered for every turn but hidden
+       until dev mode is on, so toggling reveals what already happened. */
+    .msg.meta { display: none; max-width: 94%; }
+    .chat-window.dev-on .msg.meta { display: flex; }
+    .meta-block {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .74rem;
+      line-height: 1.7;
+      color: #94a3b8;
+      overflow-x: auto;
+    }
+    .meta-block .meta-title {
+      color: #7dd3fc;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      font-size: .68rem;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .meta-block .meta-line b { color: #e2e8f0; font-weight: 600; }
+    .meta-block .devhl { color: #60a5fa; font-weight: 800; }
+    .meta-block .v-pass { color: #4ade80; font-weight: 800; text-transform: uppercase; }
+    .meta-block .v-fail { color: #f87171; font-weight: 800; text-transform: uppercase; }
+
+    /* Loyalty-tier callout inside assistant replies */
+    .msg-bubble .devhl { color: var(--brand-primary); font-weight: 800; }
+    .demo-chip {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .demo-chip:hover:not(:disabled) {
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+    }
+    .demo-chip:disabled { opacity: .5; cursor: not-allowed; }
+
     .chat-window {
       flex: 1;
       overflow-y: auto;
@@ -60,9 +135,25 @@
       gap: 14px;
     }
 
-    .msg { display: flex; max-width: 80%; }
-    .msg.user { align-self: flex-end; }
-    .msg.assistant { align-self: flex-start; }
+    .msg { display: flex; flex-direction: column; gap: 4px; max-width: 80%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+    .msg-feedback { display: flex; gap: 4px; padding-left: 4px; }
+    .fb-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1px 7px;
+      font-size: .82rem;
+      line-height: 1.4;
+      cursor: pointer;
+      opacity: .55;
+      transition: opacity var(--transition), border-color var(--transition), background var(--transition);
+    }
+    .fb-btn:hover:not(:disabled) { opacity: 1; border-color: var(--brand-primary); }
+    .fb-btn.chosen { opacity: 1; background: rgba(64,91,255,.1); border-color: var(--brand-primary); }
+    .fb-btn:disabled { cursor: default; }
 
     .msg-bubble {
       padding: 12px 16px;
@@ -196,8 +287,16 @@
             <span class="mb-label">Model</span>
             <span class="mb-model" id="mb-model">loading…</span>
             <span class="mb-config" id="mb-config"></span>
+            <button type="button" class="dev-toggle" id="dev-toggle" title="Toggle developer view">&lt;/&gt;</button>
           </div>
           <div class="mb-params" id="mb-params"></div>
+        </div>
+        <!-- Demo buttons: pick a random canned question and send it immediately.
+             Simple → should route to the cheap model; Complex → the strong one. -->
+        <div class="demo-row">
+          <button type="button" class="demo-chip" id="demo-simple">⚡ Simple task</button>
+          <button type="button" class="demo-chip" id="demo-complex">🧩 Complex task</button>
+          <button type="button" class="demo-chip" id="demo-bad">🚨 Bad response</button>
         </div>
         <div class="chat-window" id="chat-window">
           <div class="msg assistant">
@@ -277,6 +376,20 @@
         return id;
       })();
 
+      // Build request headers carrying the current signed-in identity so the
+      // server evaluates the AI Config against the same rich context as the rest
+      // of the site (key = email when signed in, plus tier + name). Read fresh
+      // each call so switching users in the nav dropdown takes effect immediately.
+      function authHeaders(base) {
+        const email = localStorage.getItem('tt-user-email') || localStorage.getItem('tt-persona-email');
+        const tier  = localStorage.getItem('tt-user-tier');
+        const name  = localStorage.getItem('tt-user-name');
+        const h = Object.assign({ 'x-session-id': sessionId, 'x-user-key': email || sessionId }, base || {});
+        if (tier) h['x-user-tier'] = tier;
+        if (name || email) h['x-user-name'] = name || email;
+        return h;
+      }
+
       // ── Model banner ────────────────────────────────────────────────────
       // Shows the model + all parameters currently served by the LD AI Config
       // (ai-planner). Loaded from /api/ai-planner/config, refreshed on a poll so
@@ -287,11 +400,14 @@
       const mbConfig = document.getElementById('mb-config');
       const mbDot    = document.getElementById('mb-dot');
 
+      let lastComplexity = null; // most recent classifier verdict (from /chat meta)
+
       function renderBanner(meta) {
         if (!meta) return;
         if (meta.model) mbModel.textContent = meta.model;
         if (meta.configKey) mbConfig.textContent = 'LD AI Config: ' + meta.configKey;
         if (typeof meta.enabled === 'boolean') mbDot.classList.toggle('off', !meta.enabled);
+        if (meta.complexity) lastComplexity = meta.complexity;
         const params = meta.parameters || {};
         mbParams.innerHTML = '';
         Object.keys(params).forEach((key) => {
@@ -303,30 +419,128 @@
           pill.appendChild(val);
           mbParams.appendChild(pill);
         });
+        if (lastComplexity) {
+          const pill = document.createElement('span');
+          pill.className = 'mb-pill';
+          pill.appendChild(document.createTextNode('complexity: '));
+          const val = document.createElement('b');
+          val.textContent = lastComplexity;
+          pill.appendChild(val);
+          mbParams.appendChild(pill);
+        }
       }
 
       async function loadConfig() {
         try {
-          const res = await fetch('/api/ai-planner/config', { headers: { 'x-session-id': sessionId } });
+          const res = await fetch('/api/ai-planner/config', { headers: authHeaders() });
           if (res.ok) renderBanner(await res.json());
         } catch { /* leave last-known values on the banner */ }
       }
       loadConfig();
       setInterval(loadConfig, 10000); // reflect live LD AI Config changes
 
+      // When the nav dropdown switches users, re-evaluate immediately so the
+      // banner flips to whatever the new identity resolves to (e.g. a rule like
+      // "Diamond → Claude" takes effect on the spot, not on the next poll).
+      window.addEventListener('tt:user-changed', loadConfig);
+
       // The server is stateless — the browser holds the conversation and
       // sends the full history on every turn.
       const history = [];
 
-      function appendMessage(role, content) {
+      // Wrap occurrences of the signed-in loyalty tier (e.g. "Diamond") in a
+      // bold blue highlight — the demo callout for LD-driven personalization.
+      function tierHighlighted(text) {
+        const frag = document.createDocumentFragment();
+        const tier = localStorage.getItem('tt-user-tier');
+        if (!tier) { frag.appendChild(document.createTextNode(text)); return frag; }
+        const re = new RegExp('\\b(' + tier + ')\\b', 'gi');
+        let last = 0, m;
+        while ((m = re.exec(text)) !== null) {
+          frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const hl = document.createElement('span');
+          hl.className = 'devhl';
+          hl.textContent = m[1];
+          frag.appendChild(hl);
+          last = m.index + m[1].length;
+        }
+        frag.appendChild(document.createTextNode(text.slice(last)));
+        return frag;
+      }
+
+      function appendMessage(role, content, feedbackToken) {
         const wrap = document.createElement('div');
         wrap.className = 'msg ' + role;
         const bubble = document.createElement('div');
         bubble.className = 'msg-bubble';
-        bubble.textContent = content;
+        if (role === 'assistant') {
+          bubble.appendChild(tierHighlighted(content));
+        } else {
+          bubble.textContent = content;
+        }
         wrap.appendChild(bubble);
+        // Thumbs up/down on assistant replies → LD Satisfaction metric.
+        if (role === 'assistant' && feedbackToken) {
+          wrap.appendChild(buildFeedback(feedbackToken));
+        }
         win.appendChild(wrap);
         win.scrollTop = win.scrollHeight;
+      }
+
+      // Behind-the-scenes block. lines = [label, value, highlight?] — highlight
+      // renders the value bold blue (the "context passed into the LD prompt" callout).
+      function appendMeta(title, lines) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg meta';
+        const block = document.createElement('div');
+        block.className = 'meta-block';
+        const t = document.createElement('span');
+        t.className = 'meta-title';
+        t.textContent = title;
+        block.appendChild(t);
+        lines.forEach(([label, value, highlight]) => {
+          if (value === null || value === undefined || value === '') return;
+          const line = document.createElement('div');
+          line.className = 'meta-line';
+          line.appendChild(document.createTextNode(label + ': '));
+          const cls = highlight === true ? 'devhl' : (typeof highlight === 'string' ? highlight : null);
+          const v = document.createElement(cls ? 'span' : 'b');
+          if (cls) v.className = cls;
+          v.textContent = String(value);
+          line.appendChild(v);
+          block.appendChild(line);
+        });
+        wrap.appendChild(block);
+        win.appendChild(wrap);
+        win.scrollTop = win.scrollHeight;
+      }
+
+      function fmtTokens(t) {
+        if (!t) return null;
+        return 'in ' + (t.inputTokens ?? '?') + ' · out ' + (t.outputTokens ?? '?') + ' · total ' + (t.totalTokens ?? '?');
+      }
+
+      function buildFeedback(token) {
+        const row = document.createElement('div');
+        row.className = 'msg-feedback';
+        const up = document.createElement('button');
+        up.type = 'button'; up.className = 'fb-btn'; up.textContent = '👍';
+        const down = document.createElement('button');
+        down.type = 'button'; down.className = 'fb-btn'; down.textContent = '👎';
+        function choose(kind, btn) {
+          up.disabled = true; down.disabled = true;
+          btn.classList.add('chosen');
+          fetch('/api/ai-planner/feedback', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ token, kind }),
+          }).catch(() => {});
+        }
+        up.addEventListener('click', () => choose('up', up));
+        down.addEventListener('click', () => choose('down', down));
+        row.appendChild(up);
+        row.appendChild(down);
+        return row;
       }
 
       function showTyping() {
@@ -361,7 +575,7 @@
         try {
           const res = await fetch('/api/ai-planner/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ message, conversationHistory: history }),
           });
           hideTyping();
@@ -371,8 +585,62 @@
             return;
           }
           const data = await res.json();
-          appendMessage('assistant', data.reply);
+          // Dev view — routing block goes in BEFORE the answer bubble.
+          if (data.debug) {
+            const d = data.debug;
+            appendMeta('🔀 Routing — before the answer', [
+              ['context.key', d.context?.key],
+              ['context.name', d.context?.name],
+              ['context.tier', d.context?.tier, true],
+              ['prompt {{name}}', d.promptVariables?.name],
+              ['prompt {{tier}}', d.promptVariables?.tier, true],
+              ['classifier config', d.classifier?.configKey],
+              ['classifier model', d.classifier?.model],
+              ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
+              ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
+              ['classifier tokens', fmtTokens(d.classifier?.tokens)],
+              ['classifier error', d.classifier?.error],
+            ]);
+          }
+          // Dev view — judge block goes in before the final answer too (the
+          // judge scored the draft before the customer ever saw it).
+          if (data.debug && data.debug.judge && !data.debug.judge.skipped) {
+            const j = data.debug.judge;
+            const r = data.debug.retry;
+            appendMeta('⚖️ Judge — quality gate before the reply', [
+              ['judge config', j.configKey],
+              ['judge model', j.model],
+              ['score', j.score != null ? j.score.toFixed(2) + ' (threshold ' + (j.threshold ?? '?') + ')' : null],
+              ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
+              ['reasoning', j.reasoning],
+              ['judge latency', j.durationMs != null ? j.durationMs + 'ms' : null],
+              ['judge error', j.error],
+              ['rejected draft', r && r.retried && r.draft ? '"' + r.draft.slice(0, 180) + (r.draft.length > 180 ? '…"' : '"') : null],
+              ['retried with', r && r.retried ? r.model + ' (via LD rule: complexity = complex)' : null],
+              ['retry error', r && r.error ? r.error : null],
+            ]);
+          }
+          appendMessage('assistant', data.reply, data.feedbackToken);
           history.push({ role: 'assistant', content: data.reply });
+          // Dev view — generation block goes in AFTER the answer bubble.
+          if (data.debug) {
+            const g = data.debug.generation || {};
+            const r = data.debug.retry;
+            const final = (r && r.retried) ? r : g;
+            appendMeta('🧠 Generation — after the answer', [
+              ['LD AI Config', g.configKey],
+              ['routed by', (r && r.retried)
+                ? 'judge retry → targeting rule on context.complexity = complex'
+                : 'targeting rule on context.complexity = ' + (data.debug.context?.complexity || '?')],
+              ['provider', final.provider],
+              ['model', final.model],
+              ['parameters', final.parameters ? JSON.stringify(final.parameters) : null],
+              ['latency', final.durationMs != null ? final.durationMs + 'ms' : null],
+              ['tokens', fmtTokens(final.tokens)],
+              ['stop reason', final.stopReason || (r && r.retried ? 'end_turn' : null)],
+              ['first attempt (rejected)', (r && r.retried) ? g.model + ' · ' + g.durationMs + 'ms · ' + (fmtTokens(g.tokens) || '') : null],
+            ]);
+          }
           if (data.meta) renderBanner(data.meta); // keep banner exact to what was used
         } catch (err) {
           hideTyping();
@@ -388,6 +656,51 @@
         e.preventDefault();
         send(input.value);
       });
+
+      // Demo buttons: pick a random canned question and fire it immediately.
+      const DEMO_PROMPTS = {
+        'demo-simple': [
+          "What's the typical carry-on baggage allowance for an economy flight to Miami?",
+          'Do I need a passport to fly from Denver to Cancun?',
+          "What's the best month to visit Tokyo to see the cherry blossoms?",
+          'How early should I get to the airport for a domestic flight?',
+          'Can I bring a full-size sunscreen bottle in my checked bag?',
+        ],
+        'demo-complex': [
+          "My flight from Denver to Miami tomorrow morning was cancelled. I have a cruise departing the next day, my fare was refundable on the first leg only, and I bought travel insurance. Can I get a refund for the cancelled leg, what are my rebooking options tonight, and would insurance cover a hotel if I'm stranded?",
+          'I missed my connection in Chicago because my first flight was delayed three hours. My checked bag went ahead without me, my meeting is at 9am tomorrow, and I paid with points plus cash. Can I get rebooked tonight, where will my bag end up, and am I owed any compensation?',
+          "We're a family of five flying to Rome and the airline rescheduled our middle leg, splitting our seats up. Can we get seated together again without paying, does a fare difference apply, and if we cancel just the outbound how does the refund work across the two airlines?",
+          'A storm cancelled my last flight home and the airline rebooked me for tomorrow afternoon. I have a rental car due back tonight, a hotel I booked with a voucher, and a wedding at noon. What are my options to get home sooner, and who covers the extra rental day and hotel night?',
+        ],
+        // Questions that demand live data the model can't verify — the cheap
+        // model guesses, the judge fails it, and the strong model retries.
+        'demo-bad': [
+          'How much exactly does it cost to upgrade to first class on the Denver to Miami flight next Friday?',
+          "What's the current status of flight TT-204 from Denver to Miami tonight — is it on time?",
+          'What is the exact price to check a second bag on my Toggle Travel flight to Rome next month?',
+          'Exactly how many window seats are still available on the 8am flight to New York tomorrow?',
+        ],
+      };
+      Object.keys(DEMO_PROMPTS).forEach((id) => {
+        document.getElementById(id).addEventListener('click', () => {
+          if (input.disabled) return; // a send is already in flight
+          const pool = DEMO_PROMPTS[id];
+          input.value = pool[Math.floor(Math.random() * pool.length)];
+          send(input.value);
+        });
+      });
+
+      // Dev mode: reveals the behind-the-scenes metadata blocks (they're always
+      // rendered, just hidden) — so toggling it after a chat shows what happened.
+      const devToggle = document.getElementById('dev-toggle');
+      function applyDevMode(on) {
+        win.classList.toggle('dev-on', on);
+        devToggle.classList.toggle('active', on);
+        localStorage.setItem('tt-dev-mode', on ? '1' : '');
+        win.scrollTop = win.scrollHeight;
+      }
+      devToggle.addEventListener('click', () => applyDevMode(!win.classList.contains('dev-on')));
+      applyDevMode(localStorage.getItem('tt-dev-mode') === '1');
     })();
   </script>
 </body>
