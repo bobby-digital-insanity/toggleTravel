@@ -27,7 +27,7 @@
   <section class="hero">
     <div class="hero-bg"></div>
     <div class="hero-content container">
-      <div class="hero-eyebrow">✈ 12 Curated Destinations Worldwide</div>
+      <div class="hero-eyebrow" id="hero-eyebrow">✈ Curated Destinations Worldwide</div>
       <h1>Your next <em>adventure</em><br>awaits you!!!</h1>
       <p>Discover extraordinary destinations and book with confidence.</p>
 
@@ -152,6 +152,11 @@
         const featured = (Array.isArray(flaggedIds) && flaggedIds.length > 0)
           ? data.destinations.filter((d) => flaggedIds.includes(d.id)).slice(0, 6)
           : data.destinations.slice(0, 6);
+        // Count comes from the API rather than being hardcoded — it drifted once
+        // already when Atlantis (dest-013) was added.
+        const eyebrow = document.getElementById('hero-eyebrow');
+        if (eyebrow) eyebrow.textContent = `✈ ${data.destinations.length} Curated Destinations Worldwide`;
+
         const grid = document.getElementById('destinations-grid');
         grid.innerHTML = featured.map((d) => `
           <a href="/destination.html?id=${d.id}" class="card" style="text-decoration:none;color:inherit">
