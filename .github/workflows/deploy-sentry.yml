@@ -1,0 +1,153 @@
+name: Deploy — Sentry EC2
+
+on:
+  push:
+    branches:
+      - sentry
+  workflow_dispatch:
+
+env:
+  DOMAIN: toggletravel-sentry.launchdarklydemos.com
+
+jobs:
+  deploy:
+    name: Deploy to Sentry EC2
+    runs-on: ubuntu-latest
+    env:
+      # `secrets` cannot be referenced from a step-level `if:`, but it can be
+      # from job-level `env:`. Collapsing it to a boolean here is what lets the
+      # release steps be skipped cleanly before Sentry is set up.
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # sentry-cli needs history to associate commits with the release
+
+      # ── Sentry release ──────────────────────────────────────────────────────
+      # There are no source maps to upload: this app has no build step and ships
+      # unminified vanilla JS, so stack traces are already readable. The release
+      # exists purely to group events by deploy and enable regression detection
+      # ("this error first appeared in release X").
+      #
+      # Skipped entirely when SENTRY_AUTH_TOKEN is absent, so the deploy still
+      # works before the Sentry project is set up.
+      - name: Create Sentry release
+        if: env.HAS_SENTRY_TOKEN == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          npx --yes @sentry/cli@3 releases new "$GITHUB_SHA"
+          npx --yes @sentry/cli@3 releases set-commits "$GITHUB_SHA" --auto || \
+            echo "set-commits failed (first release for this repo?) — continuing"
+
+      - name: Deploy & Verify
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY_SENTRY }}
+          LD_CLIENT_SIDE_ID: ${{ secrets.LD_CLIENT_SIDE_ID_SENTRY }}
+          LD_API_TOKEN: ${{ secrets.LD_API_TOKEN_SENTRY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY_SENTRY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_RELEASE: ${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST_SENTRY }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY_SENTRY }}
+          port: 22
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,LD_PROJECT_KEY,SENTRY_DSN,SENTRY_RELEASE,DOMAIN
+          script: |
+            export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
+
+            set -e
+            cd /var/www/toggle-travel
+
+            echo "=== Pulling latest code (sentry) ==="
+            git reset --hard HEAD
+            git pull origin sentry
+
+            echo "=== Ensuring persistent data directory exists ==="
+            sudo mkdir -p /var/lib/toggle-travel
+            sudo chown ec2-user:ec2-user /var/lib/toggle-travel
+
+            echo "=== Ensuring native build tools are present (for better-sqlite3) ==="
+            command -v make >/dev/null && command -v g++ >/dev/null || sudo dnf install -y gcc-c++ make python3
+
+            echo "=== Injecting secrets into .env ==="
+            touch .env
+            for k in LD_SDK_KEY LD_CLIENT_SIDE_ID LD_API_TOKEN LD_PROJECT_KEY SENTRY_DSN SENTRY_RELEASE SENTRY_ENVIRONMENT DB_PATH; do
+              sed -i "/^$k=/d" .env
+            done
+            echo "LD_SDK_KEY=$LD_SDK_KEY"               >> .env
+            echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
+            echo "LD_API_TOKEN=$LD_API_TOKEN"           >> .env
+            echo "LD_PROJECT_KEY=$LD_PROJECT_KEY"       >> .env
+            echo "SENTRY_DSN=$SENTRY_DSN"               >> .env
+            echo "SENTRY_RELEASE=$SENTRY_RELEASE"       >> .env
+            echo "SENTRY_ENVIRONMENT=production"        >> .env
+            echo "DB_PATH=/var/lib/toggle-travel/toggle.db" >> .env
+
+            echo "=== Installing dependencies ==="
+            npm install --omit=dev
+
+            echo "=== Installing Playwright browsers (load generator) ==="
+            npx playwright install chromium firefox webkit
+
+            echo "=== Selecting Nginx config ==="
+            # Referencing a cert that doesn't exist yet makes `nginx -t` fail and
+            # aborts the reload, which would break the very first deploy to a new
+            # box. So pick the TLS config only once the cert is actually present.
+            if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+              echo "Cert found for $DOMAIN — using TLS config"
+              sudo cp deployment/nginx-tls.conf /etc/nginx/conf.d/toggle-travel.conf
+            else
+              echo "No cert for $DOMAIN yet — using HTTP-only config"
+              echo "  (get one: sudo certbot certonly --nginx -d $DOMAIN, then re-run this deploy)"
+              sudo cp deployment/nginx.conf /etc/nginx/conf.d/toggle-travel.conf
+            fi
+            sudo nginx -t && sudo systemctl reload nginx
+
+            echo "=== Restarting app ==="
+            pm2 delete toggle-travel toggle-traffic || true
+            pm2 start deployment/ecosystem.config.js --env production
+            pm2 save
+
+            echo "=== Waiting for workers to come up ==="
+            sleep 5
+
+            echo "=== PM2 status ==="
+            pm2 status
+
+            echo "=== Port check ==="
+            ss -tlnp | grep 3000 || echo "Nothing on port 3000"
+
+            echo "=== Recent app logs ==="
+            pm2 logs toggle-travel --lines 20 --nostream
+
+            echo "=== Health check (retrying up to 5x) ==="
+            for i in 1 2 3 4 5; do
+              HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost:3000/health || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✅ Healthy — HTTP $HTTP_STATUS"
+                exit 0
+              fi
+              echo "Attempt $i: HTTP $HTTP_STATUS — waiting 3s..."
+              sleep 3
+            done
+
+            echo "❌ Health check failed — final PM2 logs:"
+            pm2 logs toggle-travel --lines 40 --nostream
+            exit 1
+
+      - name: Finalize Sentry release
+        if: ${{ success() && env.HAS_SENTRY_TOKEN == 'true' }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          npx --yes @sentry/cli@3 releases finalize "$GITHUB_SHA"
+          npx --yes @sentry/cli@3 releases deploys "$GITHUB_SHA" new -e production

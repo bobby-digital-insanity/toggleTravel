@@ -1,54 +1,84 @@
 'use strict';
 
 const logger = require('../logger');
+const db = require('../db');
 const { getPricing } = require('./externalMockService');
 
-const destinations = require('../data/destinations.json');
+function rowToDestination(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    region: row.region,
+    tagline: row.tagline,
+    description: row.description,
+    basePrice: row.base_price,
+    currency: row.currency,
+    heroImage: row.hero_image,
+    activities: JSON.parse(row.activities || '[]'),
+    bestSeason: row.best_season,
+    weatherSummary: row.weather_summary,
+    rating: row.rating,
+    duration: row.duration,
+    highlights: JSON.parse(row.highlights || '[]'),
+  };
+}
 
 async function list() {
-  await new Promise((r) => setTimeout(r, 5));
+  const rows = db.all('SELECT id, name, region, tagline, base_price, currency, hero_image, activities, best_season, weather_summary, rating, duration, highlights FROM destinations ORDER BY name');
+  const results = rows.map(rowToDestination);
 
-  logger.info('destinations_listed', { count: destinations.length });
-  return destinations.map(({ description, ...summary }) => summary);
+  logger.info('destinations_listed', { count: results.length });
+  return results;
 }
 
 async function getById(id) {
-  const dest = destinations.find((d) => d.id === id);
+  const row = db.get('SELECT * FROM destinations WHERE id = @id', { id });
 
-  if (!dest) {
+  if (!row) {
     const err = new Error(`Destination not found: ${id}`);
     err.status = 404;
     throw err;
   }
 
-  return dest;
+  return rowToDestination(row);
 }
 
-async function search({ query = '', region, minPrice, maxPrice, departureDate }) {
-  let results = [...destinations];
+// Sort orders for the search-ranking flag. `recommended` preserves the original
+// behavior (rating DESC). All are whitelisted — the ranking value comes from a
+// flag but is never interpolated raw into SQL.
+const RANKING_SQL = {
+  recommended: 'rating DESC',
+  'price-low': 'base_price ASC',
+  'price-high': 'base_price DESC',
+  trending: 'rating DESC, base_price ASC',
+};
+
+async function search({ query = '', region, minPrice, maxPrice, departureDate, ranking = 'recommended' }) {
+  const where = [];
+  const params = {};
 
   if (query) {
-    const q = query.toLowerCase();
-    results = results.filter(
-      (d) =>
-        d.name.toLowerCase().includes(q) ||
-        d.tagline.toLowerCase().includes(q) ||
-        d.description.toLowerCase().includes(q) ||
-        d.activities.some((a) => a.toLowerCase().includes(q))
-    );
+    where.push('(LOWER(name) LIKE @q OR LOWER(tagline) LIKE @q OR LOWER(description) LIKE @q OR LOWER(activities) LIKE @q)');
+    params.q = `%${query.toLowerCase()}%`;
   }
-
   if (region && region !== 'all') {
-    results = results.filter((d) => d.region === region);
+    where.push('region = @region');
+    params.region = region;
   }
-
   if (minPrice) {
-    results = results.filter((d) => d.basePrice >= Number(minPrice));
+    where.push('base_price >= @minPrice');
+    params.minPrice = Number(minPrice);
+  }
+  if (maxPrice) {
+    where.push('base_price <= @maxPrice');
+    params.maxPrice = Number(maxPrice);
   }
 
-  if (maxPrice) {
-    results = results.filter((d) => d.basePrice <= Number(maxPrice));
-  }
+  const orderBy = RANKING_SQL[ranking] || RANKING_SQL.recommended;
+  const sql = `SELECT * FROM destinations${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY ${orderBy}`;
+  const rows = db.all(sql, params);
+  const results = rows.map(rowToDestination);
 
   let pricingMultiplier = 1;
   try {
@@ -68,6 +98,7 @@ async function search({ query = '', region, minPrice, maxPrice, departureDate })
   logger.info('search_performed', {
     query,
     region: region || 'all',
+    ranking,
     results_count: enriched.length,
   });
 

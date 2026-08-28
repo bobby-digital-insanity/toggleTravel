@@ -1,7 +1,7 @@
 {
   "name": "toggle-travel",
   "version": "1.0.0",
-  "description": "Toggle Travel - A demo travel booking site",
+  "description": "Toggle Travel - A demo travel booking site (LaunchDarkly flags + Sentry observability)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -10,6 +10,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@launchdarkly/node-server-sdk": "^9.13.1",
+    "@sentry/node": "^10.72.0",
+    "better-sqlite3": "^12.10.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

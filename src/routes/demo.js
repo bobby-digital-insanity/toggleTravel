@@ -45,7 +45,14 @@ router.post('/seed', (req, res) => {
 
   activeJob = { child, startedAt: new Date().toISOString(), rounds, browsers: browsersArg };
 
+  // Keep the NDJSON stream alive through long Playwright flush waits, so an
+  // idle proxy doesn't tear down a run that is still working.
+  const keepalive = setInterval(() => {
+    if (!res.writableEnded) send('log', { line: '… still running' });
+  }, 20000);
+
   child.on('error', (err) => {
+    clearInterval(keepalive);
     send('log', { line: `✗ Failed to start process: ${err.message}`, error: true });
     send('done', { code: 1, rounds });
     activeJob = null;
@@ -67,6 +74,7 @@ router.post('/seed', (req, res) => {
   });
 
   child.on('close', (code) => {
+    clearInterval(keepalive);
     send('done', { code: code ?? 1, rounds });
     activeJob = null;
     res.end();
@@ -78,6 +86,7 @@ router.post('/seed', (req, res) => {
   // express.json() parses the body), which would kill the child right after spawn.
   // res.on('close') only fires when the connection is actually torn down.
   res.on('close', () => {
+    clearInterval(keepalive);
     if (activeJob && !res.writableEnded) {
       activeJob.child.kill();
       activeJob = null;

@@ -7,3 +7,6 @@ dist/
 CLAUDE_NOTES.md
 *_NOTES.md
 DD_AGENT_CONFIG.yaml
+
+# SQLite database + WAL sidecars (created at runtime; prod uses /var/lib)
+data/

@@ -1,96 +1,131 @@
-# Datadog — Toggle Travel
+# Sentry — Toggle Travel
 
-This branch is instrumented with **Datadog APM** using the `dd-trace` Node.js tracer alongside the **Datadog Agent** on the EC2. This is a hybrid approach: the agent handles infrastructure metrics and log collection, while `dd-trace` adds distributed tracing and custom spans.
+This branch pairs **LaunchDarkly feature flags** with **Sentry** for observability: error monitoring,
+performance tracing, and session replay. It is the counterpart to the `launchdarkly` branch, which
+uses LaunchDarkly for both. One variable changes between them — the observability vendor — so the
+two are directly comparable.
 
 ## What Was Changed vs `main`
 
-- `public/js/nav.js` — injects the Datadog badge into the nav bar
-- `dd-trace` initialization (see setup below)
+- `src/instrument.js` — new. `Sentry.init()`, required first in the process
+- `src/launchdarkly.js` — new. LD Node SDK wrapper; reports every evaluation to Sentry
+- `src/db.js` — new. SQLite, with each query wrapped in a Sentry span
+- `src/logger.js` — Winston logs forwarded to Sentry as breadcrumbs
+- `public/js/sentry.js`, `public/js/flags.js` — new. Browser SDKs + the LD→Sentry flag inspector
+- `public/js/nav.js` — Sentry badge, flag-driven nav and promo banner
+- `deployment/nginx-tls.conf` — new. TLS config, selected only once a cert exists
 
-## Agent Installation (EC2)
-
-```bash
-DD_API_KEY=<your-api-key> DD_SITE="datadoghq.com" bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"
-```
-
-Configure log collection in `/etc/datadog-agent/datadog.yaml`:
-
-```yaml
-logs_enabled: true
-```
-
-Add a log config at `/etc/datadog-agent/conf.d/toggle-travel.d/conf.yaml`:
-
-```yaml
-logs:
-  - type: file
-    path: /var/log/toggle-travel/out-*.log
-    service: toggle-travel
-    source: nodejs
-```
-
-## SDK Installation (dd-trace)
+## SDK Installation
 
 ```bash
-npm install dd-trace
+npm install @sentry/node
 ```
 
-Add to the top of `src/server.js` — must be the very first line:
+Server — `src/instrument.js`, required as the **first line** of `src/server.js`:
 
 ```javascript
-require('dd-trace').init({
-  service: 'toggle-travel',
-  env: process.env.NODE_ENV || 'production',
-  logInjection: true, // adds trace_id/span_id to Winston logs automatically
+const Sentry = require('@sentry/node');
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.SENTRY_ENVIRONMENT,
+  release: process.env.SENTRY_RELEASE,
+  tracesSampleRate: 1.0,
+  integrations: [Sentry.featureFlagsIntegration()],
 });
+```
+
+Browser — the bundle is **vendored** at `public/js/sentry.browser.min.js` because this app has no
+build step:
+
+```bash
+curl -o public/js/sentry.browser.min.js \
+  https://browser.sentry-cdn.com/10.72.0/bundle.tracing.replay.min.js
 ```
 
 Add to `.env`:
 
 ```
-DD_API_KEY=your-api-key
-DD_SERVICE=toggle-travel
-DD_ENV=production
+SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
+SENTRY_ENVIRONMENT=production
 ```
 
-Update `deployment/ecosystem.config.js` to pass DD env vars:
+## Wiring LaunchDarkly flags into Sentry
+
+Sentry's official `launchDarklyIntegration()` is **not** used here, for three reasons verified
+against the installed packages:
+
+1. In `@sentry/node` it is a no-op shim that warns "can only be used in the browser".
+2. No Sentry CDN bundle contains it, and this app cannot import from npm in the browser.
+3. It records **boolean flags only** — most of this app's browser flags are strings or arrays.
+
+Instead an **LD inspector** forwards evaluations, and every flag is mirrored onto an indexed
+`flag.<key>` tag so non-boolean flags are searchable:
 
 ```javascript
-env_production: {
-  NODE_ENV: 'production',
-  DD_SERVICE: 'toggle-travel',
-  DD_ENV: 'production',
-}
+// public/js/flags.js
+ldClient = LDClient.initialize(clientSideId, context, {
+  inspectors: [{
+    type: 'flag-used',
+    name: 'sentry-flag-bridge',
+    synchronous: true,
+    method: (flagKey, detail) => window.TTSentry.reportFlag(flagKey, detail?.value),
+  }],
+});
 ```
+
+Booleans additionally go through `featureFlagsIntegration`, which populates Sentry's dedicated
+Feature Flags panel on an issue.
 
 ## What to Demo
 
-**APM — Distributed Traces**
-- **APM → Traces** → filter by `service:toggle-travel`
-- Drill into a `POST /api/bookings` — shows `inventory_check` and `payment_authorized` stages as child spans (from Winston logs correlated via `logInjection`)
-- Show the flame graph for a Vacation Mode call — the outbound call to Anthropic shows as a separate HTTP span
+**The daily checkout incident (the headline)**
+At 7am ET the traffic conductor starts a **guarded rollout** on `new-checkout-flow` — 50% treatment,
+50% control, guarded by the `booking-error` metric with auto-rollback.
 
-**Log Management**
-- **Logs** → filter by `service:toggle-travel`
-- Search `@booking_stage.stage:payment_declined` to isolate payment failures
-- Search `@session_id:alex-r1-book` to trace a single user's full journey across all log lines
-- Show log → trace correlation: click "View in APM" from a log line
+1. **Sentry → Issues** → `CheckoutV2Error: payment intent missing`. Error count climbs from zero.
+2. Open the issue → the **Feature Flags** panel shows `new-checkout-flow: true`, and the tag
+   `flag.new-checkout-flow:true` is on every event. The flag *is* the root cause, stated on the
+   issue.
+3. Search `flag.new-checkout-flow:true` in the issue stream — every treatment-arm error, nothing
+   from control.
+4. Open the linked **Session Replay** → watch a real user hit "Confirm & Pay", see the "500 —
+   Checkout Unavailable" banner and the "✨ NEW CHECKOUT" badge.
+5. **LaunchDarkly** → the rollout auto-rolls-back within minutes on the guard metric. Return to
+   Sentry: the error rate falls back to zero. Nobody paged anybody.
 
-**Dashboards**
-- Build a dashboard with: requests/min, p95 latency, error rate, AI token usage
-- The `vacation_mode_toggled` log event has `input_tokens` and `output_tokens` — create a log-based metric for token spend
+**Errors**
+- `Destination unreachable: Atlantis` — a deliberate 404, generated every load-gen round.
+  `setupExpressErrorHandler` is widened to capture 404s so this appears at all.
+- `Payment authorization declined` — the simulated 5% decline rate.
+- **Issues → filter by `traffic_source:organic`** to exclude synthetic load-gen sessions.
 
-**Monitors / Alerts**
-- Create a monitor on error rate > 8% (the error spike flow generates 400/404s each round)
-- Create a monitor on `payment_declined` count to alert on elevated payment failures
+**Tracing**
+- **Performance → `POST /api/bookings`** — the waterfall shows `inventory_check`, payment auth, and
+  the SQLite `INSERT bookings` span (manual spans from `src/db.js`; `better-sqlite3` has no auto
+  instrumentation).
+- Browser and server transactions stitch into one trace via `sentry-trace`/`baggage` propagation.
+- The app surfaces the trace id in an `x-trace-id` response header and shows it in an on-page banner
+   — copy it straight into Sentry's trace search.
 
-## Key Metrics to Highlight
+**Session Replay**
+- Sampled at **10%** of ordinary sessions but **100% on error**, because the 24/7 traffic generator
+  would otherwise flood the quota.
+- Diamond-plan users are recorded **masked** (all text, inputs and media) while other tiers record
+  readable — switch users in the nav to show privacy tiers.
+
+**Releases**
+- Each deploy creates a release tagged with the git SHA, so Sentry can attribute a new issue to the
+  deploy that introduced it. No source maps needed — the frontend ships unminified.
+
+## Key Signals
 
 | Signal | Where to find it |
 |---|---|
-| Request throughput | APM → Service page |
-| P95 latency | APM → Service page |
-| Error rate | APM → Service page → Errors tab |
-| Payment declines | Logs → `@message:payment_declined` |
-| AI token usage | Logs → `@message:vacation_mode_toggled` |
-| Session journey | Logs → `@session_id:<value>` |
+| Flag-attributed errors | Issues → tag `flag.new-checkout-flow` |
+| Checkout failure spike | Issues → `CheckoutV2Error` |
+| Deliberate 404s | Issues → `Destination unreachable` |
+| DB query timings | Performance → transaction → `db.query` spans |
+| Session journey | Issues → tag `session_id` (= the LD context key) |
+| Synthetic vs real traffic | tag `traffic_source` (`load-gen` / `organic`) |
+| Replay of a failure | Issue → linked Session Replay |

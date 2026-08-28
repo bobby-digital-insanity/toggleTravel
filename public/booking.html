@@ -117,7 +117,9 @@
 
   <div class="page-header">
     <div class="container">
-      <h1>Book Your Trip</h1>
+      <h1>Book Your Trip
+        <span id="checkout-v2-badge" style="display:none;vertical-align:middle;margin-left:10px;font-size:.72rem;font-weight:700;letter-spacing:.4px;background:linear-gradient(135deg,#362D59,#7553FF);color:#fff;border-radius:999px;padding:4px 12px">✨ NEW CHECKOUT</span>
+      </h1>
       <p>You're just a few steps away from your next adventure</p>
     </div>
   </div>
@@ -248,6 +250,14 @@
     </div>
   </footer>
 
+  <!-- Vendored SDK bundles: no build step in this app, so both SDKs ship as files.
+       Order matters — the Sentry bundle and LD bundle must both be parsed before
+       sentry.js/flags.js run, and sentry.js must define window.TTSentry before
+       flags.js registers its inspector. -->
+  <script src="/js/sentry.browser.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/sentry.js"></script>
+  <script src="/js/flags.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>
   <script>
@@ -256,12 +266,38 @@
     let destData = null;
     let currentStep = 1;
 
+    // Auto-fill contact email from the active tier user (silver@toggletravel.io etc.)
+    // Only writes when the field is empty or still holds the prior auto-filled value —
+    // never overwrites something the user typed themselves.
+    let autoFilledEmail = null;
+    function applyTierEmail() {
+      const input = document.getElementById('f-email');
+      if (!input) return;
+      const tierEmail = localStorage.getItem('tt-user-email') || '';
+      if (input.value === '' || input.value === autoFilledEmail) {
+        input.value = tierEmail;
+        autoFilledEmail = tierEmail || null;
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       if (!destinationId) { location.href = '/search.html'; return; }
 
       // Pre-fill travelers/dates from URL
       if (params.get('travelers')) document.getElementById('f-travelers').value = params.get('travelers');
       if (params.get('departure')) document.getElementById('f-departure').value = params.get('departure');
+
+      applyTierEmail();
+      window.addEventListener('tt:user-changed', applyTierEmail);
+
+      // "New checkout" badge follows new-checkout-flow in real time, so the daily
+      // incident (and the rollback) is visible in a Sentry session replay.
+      LDFlags.ready.then(() => {
+        const badge = document.getElementById('checkout-v2-badge');
+        const applyCheckoutBadge = (on) => { badge.style.display = on ? 'inline-block' : 'none'; };
+        applyCheckoutBadge(LDFlags.get('new-checkout-flow'));
+        LDFlags.onChange('new-checkout-flow', applyCheckoutBadge);
+      });
 
       // Default dates
       const dep = new Date(); dep.setDate(dep.getDate() + 30);
@@ -309,6 +345,8 @@
         const email = document.getElementById('f-email').value;
         if (!email || !email.includes('@')) { document.getElementById('err-email').textContent = 'Please enter a valid email'; return; }
         document.getElementById('err-email').textContent = '';
+        // Skip during Playwright load gen — the persona is already the LD context key (see flags.js)
+        if (window.LDFlags && !localStorage.getItem('tt-run-id')) LDFlags.identify(email);
         buildReview();
       }
 
@@ -349,6 +387,16 @@
       const spinner = document.getElementById('confirm-spinner');
       const errorEl = document.getElementById('booking-error');
 
+      // Semantic event: user clicked Confirm & Pay. Pairs with 'booking-error'
+      // (failure) to form the checkout funnel in LaunchDarkly.
+      try {
+        LDFlags.track('confirm-booking', {
+          destination_id: destinationId,
+          destination_name: destData?.name,
+          travelers: parseInt(document.getElementById('f-travelers').value, 10),
+        });
+      } catch (_) { /* never block checkout on telemetry */ }
+
       btn.disabled = true;
       btn.textContent = 'Processing…';
       spinner.style.display = '';
@@ -385,9 +433,74 @@
         btn.textContent = 'Confirm & Pay →';
         spinner.style.display = 'none';
         errorEl.style.display = '';
-        errorEl.innerHTML = err.status === 402
-          ? '💳 Payment authorization declined. Please try again — this is a simulated 5% failure rate for demo purposes.'
-          : `⚠ Booking failed: ${err.message}`;
+
+        // Fire the guard metric for the guarded-rollout demo — same LD client
+        // (and context) that evaluated new-checkout-flow, so LD can attribute
+        // the regression to the rollout's treatment arm and auto-roll-back.
+        try {
+          window.LDFlags?.track('booking-error', {
+            destination_id: destinationId,
+            http_status: err.status,
+          });
+        } catch (_) { /* never block UI on telemetry */ }
+
+        // Report to Sentry so the failure lands in Issues with the flag tags the
+        // LD inspector already attached to this scope (flag.new-checkout-flow
+        // etc.). This is the browser half of the story; bookings.js reports the
+        // server half.
+        try {
+          window.TTSentry?.captureException(err, {
+            destination_id: destinationId,
+            destination_name: destData?.name,
+            http_status: err.status,
+            trace_id: err.traceId,
+            page: 'booking',
+            stage: 'confirm_and_pay',
+          });
+        } catch (_) { /* never block UI on telemetry */ }
+
+        const traceLine = err.traceId
+          ? `<div style="font-family:monospace;font-size:.78rem;color:rgba(255,255,255,.7);margin-top:14px">Trace: ${err.traceId.slice(0, 16)}…</div>`
+          : '';
+
+        if (err.status === 404) {
+          // Atlantis (dest-013) is deliberately unbookable.
+          errorEl.removeAttribute('class');
+          errorEl.style.cssText = 'display:block;background:linear-gradient(135deg,#7a1d1d,#3a0d0d);color:#fff;border-radius:var(--radius);padding:28px;margin-bottom:16px;box-shadow:0 8px 24px rgba(122,29,29,.3)';
+          errorEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="font-size:1.6rem">❌</span>
+              <strong style="font-size:1.5rem;font-weight:900;letter-spacing:-.3px">404 — Destination Not Found</strong>
+            </div>
+            <p style="font-size:1rem;line-height:1.55;margin:0 0 16px;color:rgba(255,255,255,.92)">${err.message}</p>
+            ${traceLine}
+            <div style="margin-top:18px">
+              <a href="/search.html" class="btn" style="background:#fff;color:#7a1d1d;font-weight:700">Browse other destinations</a>
+            </div>
+          `;
+        } else if (err.status === 500) {
+          // new-checkout-flow (v2) failure — the flag-gated "bad deploy" that
+          // breaks confirm & pay for the guarded-rollout treatment arm.
+          errorEl.removeAttribute('class');
+          errorEl.style.cssText = 'display:block;background:linear-gradient(135deg,#7a1d1d,#3a0d0d);color:#fff;border-radius:var(--radius);padding:28px;margin-bottom:16px;box-shadow:0 8px 24px rgba(122,29,29,.3)';
+          errorEl.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="font-size:1.6rem">💥</span>
+              <strong style="font-size:1.5rem;font-weight:900;letter-spacing:-.3px">500 — Checkout Unavailable</strong>
+            </div>
+            <p style="font-size:1rem;line-height:1.55;margin:0 0 16px;color:rgba(255,255,255,.92)">${err.message}</p>
+            ${traceLine}
+            <div style="margin-top:18px">
+              <button onclick="confirmBooking()" class="btn" style="background:#fff;color:#7a1d1d;font-weight:700">Try again</button>
+            </div>
+          `;
+        } else {
+          errorEl.className = 'alert alert-error';
+          errorEl.style.cssText = 'display:block;margin-bottom:16px';
+          errorEl.innerHTML = err.status === 402
+            ? '💳 Payment authorization declined. Please try again — this is a simulated 5% failure rate for demo purposes.'
+            : `⚠ Booking failed: ${err.message}`;
+        }
       }
     }
   </script>

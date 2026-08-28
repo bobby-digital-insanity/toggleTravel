@@ -143,6 +143,46 @@ function onEscCloseMenu(e) {
   if (e.key === 'Escape') closeUserMenu();
 }
 
+// ── Vendor badge ────────────────────────────────────────────────────────────
+// Identifies which observability vendor this branch is wired to. main.css
+// already exposes --vendor-color/--vendor-bg for this.
+function injectVendorBadge() {
+  const navInner = document.querySelector('.nav-inner');
+  if (!navInner || document.querySelector('.nav-vendor-badge')) return;
+  const badge = document.createElement('div');
+  badge.className = 'nav-vendor-badge';
+  badge.style.cssText = '--vendor-color:#fff; --vendor-bg:#362D59; border-color:#362D59;';
+  badge.textContent = 'Sentry';
+  navInner.appendChild(badge);
+}
+
+function buildPromoBanner(text) {
+  const banner = document.createElement('div');
+  banner.id = 'promo-banner';
+  banner.style.cssText = 'background:#362D59;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.875rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:16px;';
+  const span = document.createElement('span');
+  span.textContent = text;
+  const btn = document.createElement('a');
+  btn.href = '/search.html';
+  btn.textContent = 'Search Flights \u2192';
+  btn.style.cssText = 'background:#fff;color:#362D59;padding:.25rem .75rem;border-radius:999px;font-size:.8rem;font-weight:700;text-decoration:none;white-space:nowrap;';
+  banner.appendChild(span);
+  banner.appendChild(btn);
+  return banner;
+}
+
+// LDFlags.identify awaits its own ready promise internally, so wiring this
+// before LD has initialized is safe. It also forwards the identity to Sentry.
+window.addEventListener('tt:user-changed', async (e) => {
+  const user = e.detail;
+  if (user) {
+    await LDFlags.identify(user.email, { tier: user.key });
+  } else {
+    const anonKey = LDFlags.getSessionKey();
+    if (anonKey) await LDFlags.identify(anonKey);
+  }
+});
+
 function injectUserSelect() {
   const navInner = document.querySelector('.nav-inner');
   if (!navInner) return;
@@ -154,14 +194,39 @@ function injectUserSelect() {
   renderUserSelect();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Inject Load Gen nav link if not already in the HTML
+document.addEventListener('DOMContentLoaded', async () => {
+  injectVendorBadge();
+
+  // Everything below this line needs flag values, so LD (and Sentry, which LD
+  // init brings up first) has to be ready before the nav finishes rendering.
+  await LDFlags.init();
+
   const navLinks = document.querySelector('.nav-links');
-  if (navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
+
+  // show-demo-panel: inject the Load Gen nav link only when the flag is on
+  if (LDFlags.get('show-demo-panel') && navLinks && !navLinks.querySelector('[href="/demo.html"]')) {
     const li = document.createElement('li');
     li.innerHTML = '<a href="/demo.html">Load Gen</a>';
     navLinks.appendChild(li);
   }
+
+  // promo-banner-text: banner across the top whenever the flag has a value
+  const promoText = LDFlags.get('promo-banner-text');
+  if (promoText) {
+    document.body.insertBefore(buildPromoBanner(promoText), document.body.firstChild);
+  }
+
+  // Real-time flag updates — flip the flag in LD and the banner changes without
+  // a reload. This is the demo everyone asks to see.
+  LDFlags.onChange('promo-banner-text', (newValue) => {
+    const existing = document.getElementById('promo-banner');
+    if (newValue) {
+      if (existing) existing.replaceWith(buildPromoBanner(newValue));
+      else document.body.insertBefore(buildPromoBanner(newValue), document.body.firstChild);
+    } else if (existing) {
+      existing.remove();
+    }
+  });
 
   // Active nav link
   const links = document.querySelectorAll('.nav-links a');

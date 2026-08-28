@@ -7,7 +7,8 @@ set -euo pipefail
 
 APP_DIR="/var/www/toggle-travel"
 LOG_DIR="/var/log/toggle-travel"
-REPO_URL="https://github.com/your-org/toggleTravel.git"  # Update this
+REPO_URL="https://github.com/bobby-digital-insanity/toggleTravel.git"
+BRANCH="${BRANCH:-sentry}"
 
 echo "==> Updating system packages"
 dnf update -y
@@ -30,7 +31,7 @@ echo "==> Creating app directories"
 mkdir -p "$APP_DIR" "$LOG_DIR"
 
 echo "==> Cloning repository"
-git clone "$REPO_URL" "$APP_DIR"
+git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 cd "$APP_DIR"
 
 echo "==> Installing npm dependencies"

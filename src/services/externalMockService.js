@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../logger');
+const { getFlag } = require('../launchdarkly');
 
 function jitter(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -30,15 +31,18 @@ async function getPricing(destinationId, departureDate) {
     throw err;
   }
 
-  const multiplier = 1 + (Math.random() * 0.4 - 0.2); // ±20%
+  const dynamicPricingEnabled = await getFlag('dynamic-pricing-enabled', true);
+  const multiplier = dynamicPricingEnabled
+    ? 1 + (Math.random() * 0.4 - 0.2) // ±20%
+    : 1.0;
   const data = { multiplier: parseFloat(multiplier.toFixed(2)), currency: 'USD' };
 
-  logger.debug('pricing_engine_response', { destination_id: destinationId, ...data });
+  logger.debug('pricing_engine_response', { destination_id: destinationId, dynamic_pricing: dynamicPricingEnabled, ...data });
   return data;
 }
 
 async function authorizePayment(amount, email) {
-  const failureRate = parseFloat(process.env.SIMULATE_PAYMENT_FAILURE_RATE || '0.05');
+  const failureRate = await getFlag('payment-failure-rate', parseFloat(process.env.SIMULATE_PAYMENT_FAILURE_RATE || '0.05'));
 
   await new Promise((r) => setTimeout(r, jitter(100, 300)));
 

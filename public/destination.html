@@ -178,6 +178,14 @@
     </div>
   </footer>
 
+  <!-- Vendored SDK bundles: no build step in this app, so both SDKs ship as files.
+       Order matters — the Sentry bundle and LD bundle must both be parsed before
+       sentry.js/flags.js run, and sentry.js must define window.TTSentry before
+       flags.js registers its inspector. -->
+  <script src="/js/sentry.browser.min.js"></script>
+  <script src="/js/ldclient.min.js"></script>
+  <script src="/js/sentry.js"></script>
+  <script src="/js/flags.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>
   <script>
