@@ -100,7 +100,7 @@ const GUARD_METRICS = (process.env.INCIDENT_GUARD_METRICS || METRIC_KEY)
 const BRIDGE_ENABLED       = (process.env.SENTRY_BRIDGE_ENABLED ?? 'true') !== 'false';
 const BRIDGE_IDLE_SEC      = num(process.env.SENTRY_BRIDGE_IDLE_SEC, 120);
 const BRIDGE_INCIDENT_SEC  = num(process.env.SENTRY_BRIDGE_INCIDENT_SEC, 20);
-const SENTRY_METRIC_KEY    = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-latency';
+const SENTRY_METRIC_KEY    = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-failure';
 
 const INCIDENT_API_RPM        = num(process.env.INCIDENT_API_RPM, 15);
 const INCIDENT_CHECKOUT_COUNT = num(process.env.INCIDENT_CHECKOUT_COUNT, 6); // browser checkouts per surge round
@@ -444,24 +444,26 @@ async function ensureMetric() {
   }
 }
 
-// The Sentry-sourced guard metric. Numeric + LowerThanBaseline because the
-// imported metricValue is a latency in milliseconds — a mean/percentile
-// comparison is meaningful, whereas an occurrence metric whose every value is 1
-// would average to 1 and never move.
+// The Sentry-sourced guard metric. An OCCURRENCE metric (isNumeric: false), not
+// a numeric one: the checkout-v2 path throws before payment runs, so the
+// treatment arm emits no latency samples at all and a numeric mean would never
+// regress. A failure count goes from a near-zero baseline to ~100% of the
+// treatment arm, which is what actually trips the guard.
+// (For a genuine slowdown, a numeric latency metric is the right shape — see
+// the note at the top of scripts/sentry-bridge.js.)
 async function ensureSentryMetric() {
   try {
     await ldRequest('POST', `/api/v2/metrics/${PROJECT_KEY}`, {
       body: {
         key: SENTRY_METRIC_KEY,
-        name: 'Sentry — Checkout Latency',
+        name: 'Sentry — Checkout Failures',
         kind: 'custom',
-        isNumeric: true,
-        unit: 'ms',
+        isNumeric: false,
         eventKey: SENTRY_METRIC_KEY,
         successCriteria: 'LowerThanBaseline',
         randomizationUnits: ['user'],
         description:
-          'Checkout duration sourced from Sentry trace metrics and imported per-context by '
+          'Checkout failures observed in Sentry trace metrics and imported per-context by '
           + 'scripts/sentry-bridge.js. Demonstrates guarding a rollout on an arbitrary Sentry '
           + 'dataset — LD\'s built-in Sentry integration ingests error events only.',
         tags: ['toggletravel-demo', 'sentry-sourced'],

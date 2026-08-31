@@ -129,6 +129,38 @@ in `sentry.js` no-op rather than throw, which is safe but invisible.
 
 Not wired: profiling, cron monitors.
 
+### Sentry → LaunchDarkly guard bridge
+
+`scripts/sentry-bridge.js` makes **any Sentry dataset** usable as a guarded-rollout guard metric.
+LD's built-in Sentry integration ingests error events only, and Sentry's metric-alert webhooks are
+aggregate-only (thresholds and a description, no per-user detail) — so alert→webhook→LD can only ever
+be a kill switch, never a guard metric. A guard compares treatment to control, so every event needs a
+randomization unit, and LD's metric import API requires `contextKeys` on each one.
+
+The bridge instead reads individual rows from Sentry's Explore API and maps each row's `session_id`
+to `contextKeys.user`. That works only because `session_id` **is** the LD context key everywhere in
+this app (`api.js` `sessionKey()`, `flags.js`, `requestLogger`), and `src/metrics.js` /
+`public/js/sentry.js` attach it to every metric and log automatically.
+
+Four things that cost real debugging time:
+
+1. **Metric attributes are addressed by bare name.** The context key field is `session_id`, NOT
+   `tag[session_id,string]`. The `tag[…]` form is accepted by the API and even appears in
+   `meta.fields`, but always returns `null` for metric attributes — accepted, indexed, silently
+   wrong. `node scripts/sentry-bridge.js --discover` exists precisely to catch this.
+2. **The read environment is `SENTRY_BRIDGE_ENVIRONMENT`, not `SENTRY_ENVIRONMENT`.** The latter is
+   what the process *writes* as; filtering reads by it returns `Unknown environments selected`
+   whenever nothing was written under that name.
+3. **The guard must be an occurrence metric, not latency.** `routes/bookings.js` throws before
+   payment runs, so the treatment arm emits *zero* `booking.payment_duration` records. A numeric mean
+   never regresses on absent events — the guard would look healthy while every checkout failed. A
+   failure count goes near-zero → ~100% in treatment.
+4. **Dedup on Sentry's row `id`**, not a content hash — distinct events legitimately share
+   name/value/timestamp.
+
+Arming it: set `INCIDENT_GUARD_METRICS=booking-error,sentry-checkout-failure`. Unset, the bridge
+logs that it is idle and imports nothing, because nothing would consume the events.
+
 ### Flags
 
 | Flag | Type | Default | Drives |

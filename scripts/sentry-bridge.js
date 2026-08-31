@@ -28,6 +28,21 @@
  * public/js/sentry.js attach it to every metric and log automatically. That
  * shared key is the whole reason this is possible.
  *
+ * WHY A FAILURE COUNT AND NOT LATENCY
+ * -----------------------------------
+ * The obvious guard is "checkout got slower", but it does not work for this
+ * incident. routes/bookings.js emits booking.failed and then THROWS before
+ * bookingService.create() runs, so treatment-arm requests never reach the
+ * payment stage and emit zero booking.payment_duration records. A numeric guard
+ * compares means, and the absence of events is not a regression — the guard
+ * would sit there looking healthy while every checkout failed.
+ *
+ * An occurrence metric on booking.failed does move: near-zero baseline (only the
+ * 5% simulated payment declines and Atlantis 404s) versus ~100% of the treatment
+ * arm during the incident. Latency remains a valid guard for a genuine slowdown
+ * — point SENTRY_BRIDGE_QUERY at metric.name:checkout.duration and use the
+ * numeric sentry-checkout-latency metric instead.
+ *
  * FLOW
  * ----
  *   Sentry Explore API                        LD metric import API
@@ -48,7 +63,7 @@
  *   SENTRY_BRIDGE_QUERY      Sentry search filter, e.g. 'metric.name:checkout.failed'
  *   SENTRY_BRIDGE_FIELDS     comma-separated field list override (see --discover)
  *   SENTRY_BRIDGE_SESSION_FIELD  field holding the LD context key
- *   SENTRY_BRIDGE_EVENT_KEY  LD event key to import as (default 'sentry-checkout-latency')
+ *   SENTRY_BRIDGE_EVENT_KEY  LD event key to import as (default 'sentry-checkout-failure')
  *   SENTRY_BRIDGE_WINDOW_MIN default 5 — how far back each poll looks
  *   SENTRY_BRIDGE_ENVIRONMENT  Sentry env to read from; unset = all
  *   LD_API_TOKEN             MUST have the `importEventData` action (see below)
@@ -67,9 +82,9 @@ const SENTRY_ORG   = process.env.SENTRY_ORG || null;
 const SENTRY_PROJ  = process.env.SENTRY_PROJECT || null;
 
 const DATASET       = process.env.SENTRY_BRIDGE_DATASET || 'tracemetrics';
-const QUERY         = process.env.SENTRY_BRIDGE_QUERY || 'metric.name:checkout.duration';
+const QUERY         = process.env.SENTRY_BRIDGE_QUERY || 'metric.name:booking.failed';
 const WINDOW_MIN    = num(process.env.SENTRY_BRIDGE_WINDOW_MIN, 5);
-const EVENT_KEY     = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-latency';
+const EVENT_KEY     = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-failure';
 // Which Sentry environment to READ from — deliberately NOT SENTRY_ENVIRONMENT.
 // That variable says which environment this process WRITES as ('development'
 // locally), and filtering reads by it returns "Unknown environments selected"
