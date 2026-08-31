@@ -50,6 +50,7 @@
  *   SENTRY_BRIDGE_SESSION_FIELD  field holding the LD context key
  *   SENTRY_BRIDGE_EVENT_KEY  LD event key to import as (default 'sentry-checkout-latency')
  *   SENTRY_BRIDGE_WINDOW_MIN default 5 — how far back each poll looks
+ *   SENTRY_BRIDGE_ENVIRONMENT  Sentry env to read from; unset = all
  *   LD_API_TOKEN             MUST have the `importEventData` action (see below)
  *   LD_PROJECT_KEY / LD_ENV_KEY
  */
@@ -69,7 +70,13 @@ const DATASET       = process.env.SENTRY_BRIDGE_DATASET || 'tracemetrics';
 const QUERY         = process.env.SENTRY_BRIDGE_QUERY || 'metric.name:checkout.duration';
 const WINDOW_MIN    = num(process.env.SENTRY_BRIDGE_WINDOW_MIN, 5);
 const EVENT_KEY     = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-latency';
-const SENTRY_ENV    = process.env.SENTRY_ENVIRONMENT || undefined;
+// Which Sentry environment to READ from — deliberately NOT SENTRY_ENVIRONMENT.
+// That variable says which environment this process WRITES as ('development'
+// locally), and filtering reads by it returns "Unknown environments selected"
+// whenever no data was ever written under that name. Unset means all
+// environments, which is the useful default for discovery; set it to
+// 'production' on the box to avoid importing local test data into the guard.
+const SENTRY_ENV    = process.env.SENTRY_BRIDGE_ENVIRONMENT || undefined;
 
 // The field holding the LD context key. Sentry exposes custom attributes as
 // `tag[name,type]` in the Explore API, but naming differs per dataset, which is
@@ -78,11 +85,14 @@ const SESSION_FIELD = process.env.SENTRY_BRIDGE_SESSION_FIELD || 'tag[session_id
 
 // Per-dataset default field lists. Overridable via SENTRY_BRIDGE_FIELDS because
 // these are the least certain part of the whole bridge.
+// Confirmed against the live API via --discover. `id` is present on every row
+// and is the dedup key; without it, two distinct events with the same
+// name/value/timestamp would collapse into one.
 const DEFAULT_FIELDS = {
-  tracemetrics: ['metric.name', 'value', 'timestamp'],
-  spans:        ['span.description', 'span.duration', 'timestamp'],
-  logs:         ['message', 'severity', 'timestamp'],
-  errors:       ['title', 'timestamp'],
+  tracemetrics: ['id', 'metric.name', 'value', 'timestamp'],
+  spans:        ['id', 'span.description', 'span.duration', 'timestamp'],
+  logs:         ['id', 'message', 'severity', 'timestamp'],
+  errors:       ['id', 'title', 'timestamp'],
 };
 
 const LD_EVENTS_BASE = process.env.LD_EVENTS_BASE || 'https://events.launchdarkly.com';
@@ -194,8 +204,11 @@ function rowToLdEvent(row, dataset) {
   };
 }
 
-function fingerprint(ev) {
-  return crypto.createHash('sha1')
+// Prefer Sentry's own row id; fall back to a content hash only if a dataset
+// somehow omits it.
+function fingerprint(ev, row) {
+  if (row?.id) return `id:${row.id}`;
+  return 'h:' + crypto.createHash('sha1')
     .update(`${ev.key}|${ev.contextKeys.user}|${ev.creationDate}|${ev.metricValue}`)
     .digest('hex');
 }
@@ -250,9 +263,11 @@ async function importToLd(events) {
 
 async function pollOnce({ verbose = false } = {}) {
   const { rows, meta } = await querySentry({});
-  const mapped = rows.map((r) => rowToLdEvent(r, DATASET));
-  const attributable = mapped.filter(Boolean);
-  const fresh = attributable.filter((ev) => rememberOnce(fingerprint(ev)));
+  const paired = rows.map((r) => ({ row: r, ev: rowToLdEvent(r, DATASET) })).filter((p) => p.ev);
+  const attributable = paired.map((p) => p.ev);
+  const fresh = paired
+    .filter((p) => rememberOnce(fingerprint(p.ev, p.row)))
+    .map((p) => p.ev);
 
   const dropped = rows.length - attributable.length;
   if (dropped > 0) {
