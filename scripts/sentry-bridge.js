@@ -78,10 +78,15 @@ const EVENT_KEY     = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-la
 // 'production' on the box to avoid importing local test data into the guard.
 const SENTRY_ENV    = process.env.SENTRY_BRIDGE_ENVIRONMENT || undefined;
 
-// The field holding the LD context key. Sentry exposes custom attributes as
-// `tag[name,type]` in the Explore API, but naming differs per dataset, which is
-// exactly what `--discover` is for — do not trust this default blindly.
-const SESSION_FIELD = process.env.SENTRY_BRIDGE_SESSION_FIELD || 'tag[session_id,string]';
+// The field holding the LD context key.
+//
+// Confirmed by probing the live API: for dataset=tracemetrics the attribute is
+// addressed as the BARE name `session_id`. The `tag[name,type]` syntax from the
+// Explore docs is accepted by the API — it appears in meta.fields — but always
+// returns null for metric attributes, because metric attributes are not tags.
+// That combination (accepted, indexed, silently null) is exactly the trap the
+// --discover mode exists to catch. `tags[session_id]` also resolves correctly.
+const SESSION_FIELD = process.env.SENTRY_BRIDGE_SESSION_FIELD || 'session_id';
 
 // Per-dataset default field lists. Overridable via SENTRY_BRIDGE_FIELDS because
 // these are the least certain part of the whole bridge.
