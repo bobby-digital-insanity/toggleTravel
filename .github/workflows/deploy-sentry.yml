@@ -64,12 +64,19 @@ jobs:
           LD_API_TOKEN: ${{ secrets.LD_API_TOKEN_SENTRY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_RELEASE: ${{ github.sha }}
+          # The Sentry -> LD bridge READS from Sentry's API, which the DSN cannot
+          # do (a DSN is write-only). These three are what scripts/sentry-bridge.js
+          # needs on the box.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          INCIDENT_GUARD_METRICS: ${{ vars.INCIDENT_GUARD_METRICS }}
         with:
           host: ${{ secrets.EC2_HOST_SENTRY }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_SENTRY }}
           port: 22
-          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,LD_PROJECT_KEY,LD_ENV_KEY,SENTRY_DSN,SENTRY_RELEASE,DOMAIN
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,LD_PROJECT_KEY,LD_ENV_KEY,SENTRY_DSN,SENTRY_RELEASE,SENTRY_AUTH_TOKEN,SENTRY_ORG,SENTRY_PROJECT,INCIDENT_GUARD_METRICS,DOMAIN
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -89,7 +96,7 @@ jobs:
 
             echo "=== Injecting secrets into .env ==="
             touch .env
-            for k in LD_SDK_KEY LD_CLIENT_SIDE_ID LD_API_TOKEN LD_PROJECT_KEY LD_ENV_KEY SENTRY_DSN SENTRY_RELEASE SENTRY_ENVIRONMENT DB_PATH; do
+            for k in LD_SDK_KEY LD_CLIENT_SIDE_ID LD_API_TOKEN LD_PROJECT_KEY LD_ENV_KEY SENTRY_DSN SENTRY_RELEASE SENTRY_ENVIRONMENT SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT INCIDENT_GUARD_METRICS DB_PATH; do
               sed -i "/^$k=/d" .env
             done
             echo "LD_SDK_KEY=$LD_SDK_KEY"               >> .env
@@ -101,6 +108,12 @@ jobs:
             echo "SENTRY_RELEASE=$SENTRY_RELEASE"       >> .env
             echo "SENTRY_ENVIRONMENT=production"        >> .env
             echo "DB_PATH=/var/lib/toggle-travel/toggle.db" >> .env
+            echo "SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN" >> .env
+            echo "SENTRY_ORG=$SENTRY_ORG"               >> .env
+            echo "SENTRY_PROJECT=$SENTRY_PROJECT"       >> .env
+            # Empty is fine: the conductor defaults to booking-error only, and the
+            # bridge stays idle unless the Sentry metric is actually a guard.
+            echo "INCIDENT_GUARD_METRICS=$INCIDENT_GUARD_METRICS" >> .env
 
             echo "=== Sanity-checking injected config ==="
             [ -n "$LD_SDK_KEY" ]        || echo "WARNING: LD_SDK_KEY empty — server flags will use code defaults (set LD_SDK_KEY_SENTRY)"

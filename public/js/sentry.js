@@ -167,28 +167,47 @@ window.TTSentry = (function () {
     if (typeof Sentry === 'undefined' || !Sentry.logger) return;
     try {
       const fn = Sentry.logger[level] || Sentry.logger.info;
-      fn(message, { traffic_source: isLoadGen() ? 'load-gen' : 'organic', ...attributes });
+      fn(message, withAttribution({ traffic_source: isLoadGen() ? 'load-gen' : 'organic', ...attributes }));
     } catch (_) { /* never let telemetry throw */ }
   }
 
   // ── Metrics ────────────────────────────────────────────────────────────────
   // Same naming rule as the server (src/metrics.js): `<domain>.<event>`, with
   // dimensions in attributes, never baked into the metric name.
+  // Same attribution requirement as the server (see src/metrics.js): every
+  // metric carries the LD context key so the Sentry -> LD bridge can map it to
+  // contextKeys.user. Precedence must match api.js sessionKey() and flags.js.
+  function attributionKey() {
+    try {
+      return localStorage.getItem('tt-user-email')
+        || localStorage.getItem('tt-persona-email')
+        || localStorage.getItem('tt-session-id')
+        || null;
+    } catch (_) { return null; }
+  }
+
+  function withAttribution(attributes) {
+    const key = attributionKey();
+    return key && attributes.session_id === undefined
+      ? { ...attributes, session_id: key }
+      : attributes;
+  }
+
   const metric = {
     count(name, value = 1, attributes = {}) {
       if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
-      try { Sentry.metrics.count(name, value, { attributes }); } catch (_) { /* noop */ }
+      try { Sentry.metrics.count(name, value, { attributes: withAttribution(attributes) }); } catch (_) { /* noop */ }
     },
     distribution(name, value, attributes = {}, unit = undefined) {
       if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
       try {
-        Sentry.metrics.distribution(name, value, { attributes, ...(unit ? { unit } : {}) });
+        Sentry.metrics.distribution(name, value, { attributes: withAttribution(attributes), ...(unit ? { unit } : {}) });
       } catch (_) { /* noop */ }
     },
     gauge(name, value, attributes = {}, unit = undefined) {
       if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
       try {
-        Sentry.metrics.gauge(name, value, { attributes, ...(unit ? { unit } : {}) });
+        Sentry.metrics.gauge(name, value, { attributes: withAttribution(attributes), ...(unit ? { unit } : {}) });
       } catch (_) { /* noop */ }
     },
   };

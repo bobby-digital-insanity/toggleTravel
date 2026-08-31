@@ -11,7 +11,10 @@
  *   2. API tier — cheap fetch() traffic against the public API with a rotating
  *      pool of synthetic identities (x-session-id header). Thousands of server
  *      traces/logs/flag evaluations per day for near-zero resource cost.
- *   3. Incident scheduler — every day at INCIDENT_HOUR_ET (default 7am ET),
+ *   3. Sentry → LD bridge — imports Sentry records into LaunchDarkly as
+ *      per-context metric events (scripts/sentry-bridge.js), so a guarded
+ *      rollout can be guarded by any Sentry dataset, not just error events.
+ *   4. Incident scheduler — every day at INCIDENT_HOUR_ET (default 7am ET),
  *      starts a GUARDED ROLLOUT on `new-checkout-flow` via the LD REST API
  *      ("the deploy"): the new checkout ships to 50% of live traffic and fails
  *      EVERY confirm in that arm (see src/routes/bookings.js). LaunchDarkly
@@ -85,6 +88,20 @@ const GUARDED_ALLOCATION = 50000; // 50% — the guarded-rollout max; the rest i
 // During an incident the API tier feeds the guard (bulk signal) at this reduced
 // rate so the rollout stays open a few minutes — long enough for the browser
 // checkout surge to land real (recorded) treatment-arm sessions before rollback.
+// Guard metrics for the daily rollout. Defaults to the SDK-tracked booking-error
+// metric. Add 'sentry-checkout-latency' to guard on data that originated in
+// Sentry and was imported by scripts/sentry-bridge.js — that is the whole point
+// of the bridge: any Sentry dataset becomes a guardrail, not just error events.
+const GUARD_METRICS = (process.env.INCIDENT_GUARD_METRICS || METRIC_KEY)
+  .split(',').map((m) => m.trim()).filter(Boolean);
+
+// Sentry -> LD bridge polling. Polls hard during an incident (the guard needs
+// data fast enough to trip before the backstop) and lazily otherwise.
+const BRIDGE_ENABLED       = (process.env.SENTRY_BRIDGE_ENABLED ?? 'true') !== 'false';
+const BRIDGE_IDLE_SEC      = num(process.env.SENTRY_BRIDGE_IDLE_SEC, 120);
+const BRIDGE_INCIDENT_SEC  = num(process.env.SENTRY_BRIDGE_INCIDENT_SEC, 20);
+const SENTRY_METRIC_KEY    = process.env.SENTRY_BRIDGE_EVENT_KEY || 'sentry-checkout-latency';
+
 const INCIDENT_API_RPM        = num(process.env.INCIDENT_API_RPM, 15);
 const INCIDENT_CHECKOUT_COUNT = num(process.env.INCIDENT_CHECKOUT_COUNT, 6); // browser checkouts per surge round
 
@@ -427,6 +444,36 @@ async function ensureMetric() {
   }
 }
 
+// The Sentry-sourced guard metric. Numeric + LowerThanBaseline because the
+// imported metricValue is a latency in milliseconds — a mean/percentile
+// comparison is meaningful, whereas an occurrence metric whose every value is 1
+// would average to 1 and never move.
+async function ensureSentryMetric() {
+  try {
+    await ldRequest('POST', `/api/v2/metrics/${PROJECT_KEY}`, {
+      body: {
+        key: SENTRY_METRIC_KEY,
+        name: 'Sentry — Checkout Latency',
+        kind: 'custom',
+        isNumeric: true,
+        unit: 'ms',
+        eventKey: SENTRY_METRIC_KEY,
+        successCriteria: 'LowerThanBaseline',
+        randomizationUnits: ['user'],
+        description:
+          'Checkout duration sourced from Sentry trace metrics and imported per-context by '
+          + 'scripts/sentry-bridge.js. Demonstrates guarding a rollout on an arbitrary Sentry '
+          + 'dataset — LD\'s built-in Sentry integration ingests error events only.',
+        tags: ['toggletravel-demo', 'sentry-sourced'],
+      },
+    });
+    log(`created metric ${SENTRY_METRIC_KEY}`);
+  } catch (err) {
+    if (err.status === 409) log(`metric ${SENTRY_METRIC_KEY} already exists`);
+    else throw err;
+  }
+}
+
 // Read everything we need from the flag itself — variation IDs, on/off, and
 // whether a guarded release is currently running. A live guarded release shows
 // up as a fallthrough ROLLOUT with an experimentAllocation; once it resolves
@@ -470,10 +517,12 @@ async function startGuardedRollout(state) {
       targetVariationId: state.trueId,
       randomizationUnit: 'user',
       stages: [{ allocation: GUARDED_ALLOCATION, durationMillis: MONITOR_WINDOW_MIN * 60_000 }],
-      metrics: [{ key: METRIC_KEY, isGroup: false }],
-      metricMonitoringPreferences: { [METRIC_KEY]: { autoRollback: true } },
+      metrics: GUARD_METRICS.map((key) => ({ key, isGroup: false })),
+      metricMonitoringPreferences: Object.fromEntries(
+        GUARD_METRICS.map((key) => [key, { autoRollback: true }])
+      ),
     }],
-    'Deploy: new checkout v2 — guarded rollout at 50%, guarded by Booking Errors',
+    `Deploy: new checkout v2 — guarded rollout at 50%, guarded by ${GUARD_METRICS.join(' + ')}`,
     { beta: true },
   );
 }
@@ -511,9 +560,12 @@ async function incidentLoop() {
   try {
     await ensureCheckoutFlag();
     await ensureMetric();
+    if (GUARD_METRICS.includes(SENTRY_METRIC_KEY)) await ensureSentryMetric();
   } catch (err) {
     log(`incident scheduler: could not ensure flag/metric (${err.message}) — continuing; will retry at fire time`);
   }
+
+  log(`incident scheduler: guard metrics = ${GUARD_METRICS.join(', ')}`);
 
   const testFireAt = TEST_DELAY_MIN ? Date.now() + TEST_DELAY_MIN * 60_000 : null;
   let testFired = false;
@@ -577,6 +629,52 @@ async function incidentLoop() {
   }
 }
 
+// ── Sentry → LD bridge tier ──────────────────────────────────────────────────
+// Pulls records out of Sentry and imports them into LD as per-context metric
+// events, so a guarded rollout can be guarded by ANY Sentry dataset rather than
+// only the error events LD's built-in integration ingests.
+//
+// Polls fast while an incident is live: the guard has to accumulate enough
+// attributed events to reach significance before INCIDENT_AUTO_REVERT_MIN fires
+// the backstop, otherwise the rollout gets force-stopped instead of rolled back
+// on the metric — which looks the same in the app but is a different story in LD.
+async function bridgeLoop() {
+  if (!BRIDGE_ENABLED) return log('sentry bridge: disabled (SENTRY_BRIDGE_ENABLED=false)');
+  if (!GUARD_METRICS.includes(SENTRY_METRIC_KEY)) {
+    return log(`sentry bridge: idle — "${SENTRY_METRIC_KEY}" is not in INCIDENT_GUARD_METRICS, `
+      + 'so nothing would consume the imported events');
+  }
+
+  let bridge;
+  try {
+    bridge = require('./sentry-bridge');
+  } catch (err) {
+    return log(`sentry bridge: failed to load (${err.message})`);
+  }
+
+  log(`sentry bridge: polling every ${BRIDGE_IDLE_SEC}s (${BRIDGE_INCIDENT_SEC}s during an incident) -> LD event "${SENTRY_METRIC_KEY}"`);
+
+  let consecutiveErrors = 0;
+  for (;;) {
+    try {
+      await bridge.pollOnce({ verbose: false });
+      consecutiveErrors = 0;
+    } catch (err) {
+      consecutiveErrors += 1;
+      // Back off on sustained failure (bad token, wrong org) so a misconfigured
+      // bridge doesn't hammer Sentry's API or flood the logs every 20s.
+      log(`sentry bridge error (${consecutiveErrors}): ${err.message}`);
+      if (consecutiveErrors >= 5) {
+        log('sentry bridge: 5 consecutive failures — backing off to 10m until it recovers');
+        await sleep(600_000);
+        consecutiveErrors = 0;
+        continue;
+      }
+    }
+    await sleep(jitter((incidentActive ? BRIDGE_INCIDENT_SEC : BRIDGE_IDLE_SEC) * 1000, 0.2));
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 process.on('SIGTERM', shutdown);
@@ -594,7 +692,7 @@ async function main() {
   }
   log(`conductor starting — host ${HOST}, project ${PROJECT_KEY}, env ${ENV_KEY || '(unset — incident disabled)'}`);
 
-  await Promise.all([browserLoop(), apiLoop(), incidentLoop()]);
+  await Promise.all([browserLoop(), apiLoop(), incidentLoop(), bridgeLoop()]);
 }
 
 main().catch((err) => {

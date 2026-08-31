@@ -30,16 +30,36 @@ function safe(fn) {
   }
 }
 
+// ── Attribution (required for the Sentry -> LaunchDarkly guard bridge) ───────
+// Every metric carries `session_id`, read off the request's isolation scope
+// (requestLogger sets it there). This is NOT decoration: session_id IS the
+// LaunchDarkly context key, and LD's metric import API requires a
+// `contextKeys` value on every event. Without this attribute a Sentry metric
+// cannot be attributed to a rollout arm, so it can never guard a guarded
+// rollout — the aggregate would be un-splittable between treatment and control.
+//
+// scripts/sentry-bridge.js reads this attribute back out of the Sentry Explore
+// API and maps it to contextKeys.user.
+function withAttribution(attributes) {
+  try {
+    const sessionId = Sentry.getIsolationScope()?.getScopeData()?.tags?.session_id;
+    if (sessionId && attributes.session_id === undefined) {
+      return { ...attributes, session_id: String(sessionId) };
+    }
+  } catch (_) { /* fall through to the un-attributed attributes */ }
+  return attributes;
+}
+
 function count(name, value = 1, attributes = {}) {
-  safe(() => Sentry.metrics.count(name, value, { attributes }));
+  safe(() => Sentry.metrics.count(name, value, { attributes: withAttribution(attributes) }));
 }
 
 function distribution(name, value, attributes = {}, unit = undefined) {
-  safe(() => Sentry.metrics.distribution(name, value, { attributes, ...(unit ? { unit } : {}) }));
+  safe(() => Sentry.metrics.distribution(name, value, { attributes: withAttribution(attributes), ...(unit ? { unit } : {}) }));
 }
 
 function gauge(name, value, attributes = {}, unit = undefined) {
-  safe(() => Sentry.metrics.gauge(name, value, { attributes, ...(unit ? { unit } : {}) }));
+  safe(() => Sentry.metrics.gauge(name, value, { attributes: withAttribution(attributes), ...(unit ? { unit } : {}) }));
 }
 
 module.exports = { count, distribution, gauge };
