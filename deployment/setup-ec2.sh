@@ -14,7 +14,9 @@ echo "==> Updating system packages"
 dnf update -y
 
 echo "==> Installing dependencies"
-dnf install -y git nginx
+# gcc-c++/make/python3 are required to build better-sqlite3 (native module).
+# Without them the npm install below fails on a fresh AL2023 box.
+dnf install -y git nginx gcc-c++ make python3
 
 echo "==> Installing Node.js via nvm"
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -36,6 +38,10 @@ cd "$APP_DIR"
 
 echo "==> Installing npm dependencies"
 npm install --omit=dev
+
+echo "==> Installing Playwright browsers (load generator + traffic conductor)"
+sudo -u ec2-user npx playwright install chromium firefox webkit || \
+  echo "WARNING: Playwright browser install failed — the traffic conductor will error until it succeeds"
 
 echo "==> Setting up environment"
 if [ ! -f "$APP_DIR/.env" ]; then
