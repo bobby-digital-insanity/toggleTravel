@@ -23,7 +23,11 @@ jobs:
       # `secrets` cannot be referenced from a step-level `if:`, but it can be
       # from job-level `env:`. Collapsing it to a boolean here is what lets the
       # release steps be skipped cleanly before Sentry is set up.
-      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+      # All three are required for sentry-cli. Gating on the token alone was a
+      # trap: with a token but no org/project slug, `releases new` fails, and
+      # because it runs before the deploy step it would block the deploy over
+      # what is only release metadata.
+      HAS_SENTRY_RELEASE: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
 
     steps:
       - name: Checkout
@@ -40,15 +44,17 @@ jobs:
       # Skipped entirely when SENTRY_AUTH_TOKEN is absent, so the deploy still
       # works before the Sentry project is set up.
       - name: Create Sentry release
-        if: env.HAS_SENTRY_TOKEN == 'true'
+        if: env.HAS_SENTRY_RELEASE == 'true'
+        continue-on-error: true   # release metadata must never block a deploy
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          npx --yes @sentry/cli@3 releases new "$GITHUB_SHA"
+          npx --yes @sentry/cli@3 releases new "$GITHUB_SHA" || \
+            echo "releases new failed — check SENTRY_ORG/SENTRY_PROJECT slugs; continuing"
           npx --yes @sentry/cli@3 releases set-commits "$GITHUB_SHA" --auto || \
-            echo "set-commits failed (first release for this repo?) — continuing"
+            echo "set-commits failed (repo not connected in Sentry?) — continuing"
 
       - name: Deploy & Verify
         uses: appleboy/ssh-action@v1.0.3
@@ -95,6 +101,12 @@ jobs:
             echo "SENTRY_RELEASE=$SENTRY_RELEASE"       >> .env
             echo "SENTRY_ENVIRONMENT=production"        >> .env
             echo "DB_PATH=/var/lib/toggle-travel/toggle.db" >> .env
+
+            echo "=== Sanity-checking injected config ==="
+            [ -n "$LD_SDK_KEY" ]        || echo "WARNING: LD_SDK_KEY empty — server flags will use code defaults (set LD_SDK_KEY_SENTRY)"
+            [ -n "$LD_CLIENT_SIDE_ID" ] || echo "WARNING: LD_CLIENT_SIDE_ID empty — browser flags will use code defaults (set LD_CLIENT_SIDE_ID_SENTRY)"
+            [ -n "$LD_API_TOKEN" ]      || echo "WARNING: LD_API_TOKEN empty — the daily guarded-rollout incident will NOT run (set LD_API_TOKEN_SENTRY)"
+            [ -n "$SENTRY_DSN" ]        || echo "WARNING: SENTRY_DSN empty — Sentry disabled"
 
             echo "=== Installing dependencies ==="
             npm install --omit=dev
@@ -149,11 +161,12 @@ jobs:
             exit 1
 
       - name: Finalize Sentry release
-        if: ${{ success() && env.HAS_SENTRY_TOKEN == 'true' }}
+        if: ${{ success() && env.HAS_SENTRY_RELEASE == 'true' }}
+        continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          npx --yes @sentry/cli@3 releases finalize "$GITHUB_SHA"
-          npx --yes @sentry/cli@3 releases deploys "$GITHUB_SHA" new -e production
+          npx --yes @sentry/cli@3 releases finalize "$GITHUB_SHA" || echo "finalize failed — continuing"
+          npx --yes @sentry/cli@3 releases deploys "$GITHUB_SHA" new -e production || echo "deploy marker failed — continuing"
