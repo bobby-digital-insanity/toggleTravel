@@ -397,6 +397,17 @@
         });
       } catch (_) { /* never block checkout on telemetry */ }
 
+      // Sentry metrics + logs for the checkout funnel. The counter pairs with
+      // checkout.completed / checkout.failed below; the log is searchable in
+      // Sentry Logs whether or not this attempt errors.
+      const checkoutStart = Date.now();
+      window.TTSentry?.metric.count('checkout.confirm_clicked', 1, { destination_id: destinationId });
+      window.TTSentry?.log('info', 'checkout_confirm_clicked', {
+        destination_id: destinationId,
+        destination_name: destData?.name,
+        new_checkout_flow: String(LDFlags.get('new-checkout-flow')),
+      });
+
       btn.disabled = true;
       btn.textContent = 'Processing…';
       spinner.style.display = '';
@@ -412,6 +423,14 @@
         });
 
         const booking = data.booking;
+
+        window.TTSentry?.metric.count('checkout.completed', 1, { destination_id: destinationId });
+        window.TTSentry?.metric.distribution('checkout.duration', Date.now() - checkoutStart, { outcome: 'completed' }, 'millisecond');
+        window.TTSentry?.log('info', 'checkout_completed', {
+          booking_id: booking.id,
+          destination_id: destinationId,
+          total_amount: booking.totalAmount,
+        });
 
         // Save to local booking history
         const history = JSON.parse(localStorage.getItem('bookingHistory') || '[]');
@@ -443,6 +462,19 @@
             http_status: err.status,
           });
         } catch (_) { /* never block UI on telemetry */ }
+
+        window.TTSentry?.metric.count('checkout.failed', 1, {
+          destination_id: destinationId,
+          http_status: err.status || 0,
+          new_checkout_flow: String(LDFlags.get('new-checkout-flow')),
+        });
+        window.TTSentry?.metric.distribution('checkout.duration', Date.now() - checkoutStart, { outcome: 'failed' }, 'millisecond');
+        window.TTSentry?.log('error', 'checkout_failed', {
+          destination_id: destinationId,
+          http_status: err.status || 0,
+          message: err.message,
+          new_checkout_flow: String(LDFlags.get('new-checkout-flow')),
+        });
 
         // Report to Sentry so the failure lands in Issues with the flag tags the
         // LD inspector already attached to this scope (flag.new-checkout-flow

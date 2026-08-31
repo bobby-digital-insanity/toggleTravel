@@ -114,6 +114,21 @@ At 7am ET the traffic conductor starts a **guarded rollout** on `new-checkout-fl
 - Diamond-plan users are recorded **masked** (all text, inputs and media) while other tiers record
   readable — switch users in the nav to show privacy tiers.
 
+**Logs**
+- **Logs** → every Winston line arrives as a structured, searchable log with its metadata as
+  attributes (`booking_id`, `session_id`, `stage`, `destination_id`…).
+- Search `checkout_v2_failed` during the daily incident, or `booking_failed_destination_unreachable`
+  for the Atlantis 404s.
+- These are distinct from breadcrumbs: breadcrumbs only appear attached to an error, logs are
+  queryable at any time. The app sends both.
+
+**Metrics**
+- **Metrics** → `booking.created`, `booking.failed` (by `reason`), `booking.amount` (p50/p95 basket
+  size), `search.results` by `ranking`, and the browser-side `checkout.*` funnel.
+- During the incident, `checkout.v2_failure` climbs while `booking.created` flatlines — and because
+  metrics are emitted from the request scope, they carry the `flag.*` tags, so the spike is
+  attributable to `new-checkout-flow` directly.
+
 **Releases**
 - Each deploy creates a release tagged with the git SHA, so Sentry can attribute a new issue to the
   deploy that introduced it. No source maps needed — the frontend ships unminified.

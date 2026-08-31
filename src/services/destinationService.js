@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../logger');
+const metrics = require('../metrics');
 const db = require('../db');
 const { getPricing } = require('./externalMockService');
 
@@ -101,6 +102,11 @@ async function search({ query = '', region, minPrice, maxPrice, departureDate, r
     ranking,
     results_count: enriched.length,
   });
+
+  // Tagged by ranking so you can compare result-set sizes across the
+  // search-ranking flag's variations.
+  metrics.count('search.performed', 1, { ranking, region: region || 'all', has_query: !!query });
+  metrics.distribution('search.results', enriched.length, { ranking });
 
   return enriched;
 }

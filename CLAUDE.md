@@ -46,9 +46,16 @@ changed versus the `launchdarkly` branch.
   `LD_SDK_KEY` is absent. Every `getFlag` call also reports the evaluation to Sentry.
 - **`db.js`** — SQLite via `better-sqlite3` (`DB_PATH` env). Every query is wrapped in a manual
   **Sentry span** (`op: 'db.query'`), which is what puts SQLite timings in the request waterfall.
-- **`logger.js`** — Winston. A `SentryTransport` forwards every log line as a **breadcrumb**, so an
-  error arrives carrying the structured trail that led to it. Breadcrumbs send nothing on their own,
-  so this stays cheap when the app is healthy.
+- **`logger.js`** — Winston. A `SentryTransport` forwards every line **twice**: as a
+  **breadcrumb** (rides along with the next captured error; free, but not searchable) and as a
+  **structured log** via `Sentry.logger` (searchable in Sentry Logs whether or not an error
+  occurred). Both exist because they answer different questions — see the comment in the file.
+  Object-valued Winston metadata is JSON-stringified, since log attributes must be flat scalars.
+- **`metrics.js`** — thin wrapper over `Sentry.metrics` (`count` / `distribution` / `gauge`).
+  Naming is `<domain>.<event>`; dimensions go in `attributes`, never in the metric name, or
+  cardinality explodes and nothing aggregates. Emitted from the request scope, so every metric
+  inherits the `flag.*` tags the LD bridge attached — a `booking.failed` spike is sliceable by the
+  flag that caused it. Every call is wrapped: telemetry must never break a request.
 - **`routes/`** — `health`, `destinations`, `search`, `bookings`, `demo`.
 - **`services/`**
   - `destinationService.js` — SQLite-backed. `search()` maps the `search-ranking` flag to an
@@ -95,6 +102,32 @@ Two gotchas:
   `shouldHandleError` to include 404s, because the Atlantis 404 is a headline demo error. Unrouted
   URLs return JSON from the SPA fallback rather than throwing, so this doesn't turn crawler traffic
   into issues.
+
+### Signals emitted
+
+`enableLogs` and `enableMetrics` both default to `true` in SDK v10 and are set explicitly in
+`instrument.js` anyway — the option moved out of `_experiments` across versions, and "is logging on?"
+should be answerable from that file. Enabling them emits nothing on its own; something has to call
+`Sentry.logger` / `Sentry.metrics`.
+
+| Metric | Kind | Attributes |
+|---|---|---|
+| `booking.created` | count | destination_id, travelers |
+| `booking.failed` | count | reason (destination_unreachable / payment_declined / checkout_v2), http_status, destination_id |
+| `booking.amount` | distribution (usd) | destination_id |
+| `booking.payment_duration` | distribution (ms) | outcome |
+| `search.performed` | count | ranking, region, has_query |
+| `search.results` | distribution | ranking |
+| `checkout.v2_failure` | count | destination_id, checkout_version |
+| `checkout.confirm_clicked` / `.completed` / `.failed` | count (browser) | destination_id, http_status, new_checkout_flow |
+| `checkout.duration` | distribution (ms, browser) | outcome |
+
+**Browser logs and metrics require the right CDN bundle.** The vendored file is
+`bundle.tracing.replay.logs.metrics.min.js`. The plain `tracing.replay` bundle exports neither
+`Sentry.logger` nor `Sentry.metrics`, so swapping it back would silently disable both — the helpers
+in `sentry.js` no-op rather than throw, which is safe but invisible.
+
+Not wired: profiling, cron monitors.
 
 ### Flags
 

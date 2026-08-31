@@ -91,6 +91,12 @@ window.TTSentry = (function () {
         tracesSampleRate: 1.0,
         replaysSessionSampleRate: sessionSampleRate,
         replaysOnErrorSampleRate: 1.0,
+        // Logs and metrics. These require the logs.metrics CDN bundle — the
+        // plain tracing.replay bundle has no Sentry.logger or Sentry.metrics, so
+        // swapping public/js/sentry.browser.min.js back would silently disable
+        // both (the helpers below no-op rather than throw).
+        enableLogs: true,
+        enableMetrics: true,
         // Send sentry-trace/baggage headers to our own API so a browser
         // transaction and its server transaction stitch into one trace. The
         // server whitelists both headers in its CORS config.
@@ -154,6 +160,39 @@ window.TTSentry = (function () {
     }
   }
 
+  // ── Structured logs ────────────────────────────────────────────────────────
+  // Searchable in Sentry Logs, unlike breadcrumbs. Guarded on Sentry.logger so a
+  // bundle without logs support degrades to a no-op instead of throwing.
+  function log(level, message, attributes = {}) {
+    if (typeof Sentry === 'undefined' || !Sentry.logger) return;
+    try {
+      const fn = Sentry.logger[level] || Sentry.logger.info;
+      fn(message, { traffic_source: isLoadGen() ? 'load-gen' : 'organic', ...attributes });
+    } catch (_) { /* never let telemetry throw */ }
+  }
+
+  // ── Metrics ────────────────────────────────────────────────────────────────
+  // Same naming rule as the server (src/metrics.js): `<domain>.<event>`, with
+  // dimensions in attributes, never baked into the metric name.
+  const metric = {
+    count(name, value = 1, attributes = {}) {
+      if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
+      try { Sentry.metrics.count(name, value, { attributes }); } catch (_) { /* noop */ }
+    },
+    distribution(name, value, attributes = {}, unit = undefined) {
+      if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
+      try {
+        Sentry.metrics.distribution(name, value, { attributes, ...(unit ? { unit } : {}) });
+      } catch (_) { /* noop */ }
+    },
+    gauge(name, value, attributes = {}, unit = undefined) {
+      if (typeof Sentry === 'undefined' || !Sentry.metrics) return;
+      try {
+        Sentry.metrics.gauge(name, value, { attributes, ...(unit ? { unit } : {}) });
+      } catch (_) { /* noop */ }
+    },
+  };
+
   function captureException(err, context = {}) {
     if (typeof Sentry === 'undefined') return;
     try {
@@ -161,5 +200,5 @@ window.TTSentry = (function () {
     } catch (_) { /* never let reporting throw */ }
   }
 
-  return { init, config, reportFlag, identify, captureException, isLoadGen };
+  return { init, config, reportFlag, identify, captureException, log, metric, isLoadGen };
 }());

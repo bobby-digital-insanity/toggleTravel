@@ -2,6 +2,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../logger');
+const metrics = require('../metrics');
 const db = require('../db');
 const { authorizePayment } = require('./externalMockService');
 const destinationService = require('./destinationService');
@@ -45,6 +46,7 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
       contact_email: contactEmail,
       quoted_amount: totalAmount,
     });
+    metrics.count('booking.failed', 1, { reason: 'destination_unreachable', http_status: 404, destination_id: destinationId });
     const err = new Error(`Destination unreachable: ${dest.name} is not currently bookable`);
     err.status = 404;
     throw err;
@@ -56,8 +58,11 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
   try {
     payment = await authorizePayment(totalAmount, contactEmail);
     logger.info('booking_stage', { ...logCtx, stage: 'payment_authorized', duration_ms: Date.now() - payStart, amount: totalAmount });
+    metrics.distribution('booking.payment_duration', Date.now() - payStart, { outcome: 'authorized' }, 'millisecond');
   } catch (err) {
     logger.warn('booking_stage', { ...logCtx, stage: 'payment_declined', duration_ms: Date.now() - payStart, amount: totalAmount, reason: err.message });
+    metrics.count('booking.failed', 1, { reason: 'payment_declined', http_status: err.status || 402, destination_id: destinationId });
+    metrics.distribution('booking.payment_duration', Date.now() - payStart, { outcome: 'declined' }, 'millisecond');
     throw err;
   }
 
@@ -95,6 +100,12 @@ async function create({ destinationId, travelers, departureDate, returnDate, con
       created_at: booking.createdAt,
     }
   );
+
+  // Counter + revenue distribution. `booking.amount` is a distribution rather
+  // than a counter so the UI gives percentiles (p50/p95 basket size), not just a
+  // running total.
+  metrics.count('booking.created', 1, { destination_id: destinationId, travelers: Number(travelers) });
+  metrics.distribution('booking.amount', totalAmount, { destination_id: destinationId }, 'usd');
 
   logger.info('booking_created', {
     booking_id: bookingId,

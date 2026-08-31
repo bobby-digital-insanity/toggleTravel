@@ -5,6 +5,7 @@ const router = express.Router();
 const bookingService = require('../services/bookingService');
 const { getFlag, track } = require('../launchdarkly');
 const logger = require('../logger');
+const metrics = require('../metrics');
 
 router.post('/', async (req, res, next) => {
   try {
@@ -38,6 +39,11 @@ router.post('/', async (req, res, next) => {
         error: 'payment intent missing',
       });
       track('booking-error', req.sessionId, { destination_id: destinationId, http_status: 500 });
+      // The incident's own metric. Emitted from the request scope, so it carries
+      // the flag.new-checkout-flow tag the LD bridge attached — the spike is
+      // sliceable by the flag that caused it.
+      metrics.count('checkout.v2_failure', 1, { destination_id: destinationId, checkout_version: 'v2' });
+      metrics.count('booking.failed', 1, { reason: 'checkout_v2', http_status: 500, destination_id: destinationId });
       const err = new Error('CheckoutV2Error: payment intent missing — unable to confirm booking');
       err.status = 500;
       throw err;
