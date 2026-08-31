@@ -141,9 +141,19 @@ against the healthy control arm and rolls back within minutes; the conductor re-
 next day. Guarded rollouts cap treatment at 50% by design — the control arm is required for the
 comparison.
 
-`LD_PROJECT_KEY` and `LD_ENV_KEY` default to `ToggleTravelSentry` / `production`. **Verify both
-against the real LD project** — a mismatch makes every REST call 404 and silently disables the
-incident while traffic keeps running.
+**LaunchDarkly layout:** this branch is an **environment** (`sentry`) inside the shared
+`ToggleTravel` project — not a separate project. Siblings: `launch-darkly`, `datadog`, `dynatrace`,
+`grafana`, `test`, `production`. Flags and metrics are project-wide, so the flags the other branches
+created already exist here; targeting and rollouts are per-environment, so the daily incident in
+`sentry` cannot collide with the one on the `launchdarkly` branch.
+
+**`LD_ENV_KEY` has no code default, deliberately.** It used to fall back to `production` — which is a
+real, `critical: true` environment in this project. A missing `LD_ENV_KEY` would therefore *not*
+404; it would successfully start a daily guarded rollout on `new-checkout-flow` in Production.
+`traffic-conductor.js` now refuses to start the incident scheduler unless `LD_ENV_KEY` is set
+explicitly, and the deploy workflow injects `LD_ENV_KEY: sentry` from job-level `env:` (it is config,
+not a secret, so it stays reviewable in the workflow file). Traffic tiers are unaffected by the
+refusal.
 
 ### Load generator (`scripts/playwright-load.js`)
 
@@ -214,8 +224,8 @@ NODE_ENV                      # development | production
 LD_SDK_KEY                    # LaunchDarkly server-side SDK key
 LD_CLIENT_SIDE_ID             # LD client-side ID (served to the browser via /api/config)
 LD_API_TOKEN                  # LD REST token (Writer) — conductor's daily guarded rollout
-LD_PROJECT_KEY                # Default ToggleTravelSentry — VERIFY against the real project
-LD_ENV_KEY                    # Default production — VERIFY against the real project
+LD_PROJECT_KEY                # ToggleTravel (shared project); injected by the deploy workflow
+LD_ENV_KEY                    # sentry — NO code default; the conductor refuses the incident without it
 SENTRY_DSN                    # Public write-only credential; also served to the browser
 SENTRY_ENVIRONMENT            # Defaults to NODE_ENV
 SENTRY_RELEASE                # Set to the git SHA by the deploy workflow

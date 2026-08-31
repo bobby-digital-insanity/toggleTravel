@@ -67,12 +67,17 @@ const TEST_DELAY_MIN     = process.env.INCIDENT_TEST_DELAY_MIN ? num(process.env
 
 const LD_BASE     = process.env.LD_API_BASE || 'https://app.launchdarkly.com';
 const LD_TOKEN    = process.env.LD_API_TOKEN || null;
-// NOTE: confirm both of these against the actual LD project before first run.
-// PROJECT_KEY must match the new Sentry-branch project's key, and ENV_KEY its
-// environment key — a mismatch makes every LD REST call 404 and silently
-// disables the daily incident (traffic tiers keep running).
-const PROJECT_KEY = process.env.LD_PROJECT_KEY || 'ToggleTravelSentry';
-const ENV_KEY     = process.env.LD_ENV_KEY || 'production';
+// This branch lives in the SHARED `ToggleTravel` project as its own environment
+// (`sentry`), alongside launch-darkly / datadog / dynatrace / grafana / test /
+// production. Flags and metrics are project-wide; targeting is per-environment.
+//
+// ENV_KEY has NO DEFAULT on purpose. It used to fall back to 'production', which
+// is a real, `critical: true` environment in this project — so a missing
+// LD_ENV_KEY would not 404, it would successfully start a daily guarded rollout
+// on new-checkout-flow in Production. Failing loud beats writing to the wrong
+// environment.
+const PROJECT_KEY = process.env.LD_PROJECT_KEY || 'ToggleTravel';
+const ENV_KEY     = process.env.LD_ENV_KEY || null;
 const FLAG_KEY    = 'new-checkout-flow';
 const METRIC_KEY  = 'booking-error';
 const GUARDED_ALLOCATION = 50000; // 50% — the guarded-rollout max; the rest is control
@@ -497,6 +502,11 @@ async function incidentLoop() {
   if (!LD_TOKEN) {
     return log('incident scheduler: LD_API_TOKEN not set — daily checkout incident will NOT run (traffic tiers unaffected)');
   }
+  if (!ENV_KEY) {
+    return log('incident scheduler: LD_ENV_KEY not set — REFUSING to run. This flag flip targets a '
+      + 'specific LD environment and there is no safe default (the shared project has a critical '
+      + '"production" environment). Set LD_ENV_KEY=sentry. Traffic tiers unaffected.');
+  }
 
   try {
     await ensureCheckoutFlag();
@@ -582,7 +592,7 @@ async function main() {
     log('TRAFFIC_ENABLED=false — conductor idle (set TRAFFIC_ENABLED=true to start)');
     for (;;) await sleep(3600_000);
   }
-  log(`conductor starting — host ${HOST}, project ${PROJECT_KEY}, env ${ENV_KEY}`);
+  log(`conductor starting — host ${HOST}, project ${PROJECT_KEY}, env ${ENV_KEY || '(unset — incident disabled)'}`);
 
   await Promise.all([browserLoop(), apiLoop(), incidentLoop()]);
 }

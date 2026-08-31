@@ -8,6 +8,12 @@ on:
 
 env:
   DOMAIN: toggletravel-sentry.launchdarklydemos.com
+  # LD project/environment keys are config, not secrets, so they live here where
+  # they're reviewable. ENV_KEY especially: the shared ToggleTravel project has a
+  # critical `production` environment, and the conductor now refuses to start the
+  # daily rollout rather than guess which environment to write to.
+  LD_PROJECT_KEY: ToggleTravel
+  LD_ENV_KEY: sentry
 
 jobs:
   deploy:
@@ -50,7 +56,6 @@ jobs:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY_SENTRY }}
           LD_CLIENT_SIDE_ID: ${{ secrets.LD_CLIENT_SIDE_ID_SENTRY }}
           LD_API_TOKEN: ${{ secrets.LD_API_TOKEN_SENTRY }}
-          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY_SENTRY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_RELEASE: ${{ github.sha }}
         with:
@@ -58,7 +63,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY_SENTRY }}
           port: 22
-          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,LD_PROJECT_KEY,SENTRY_DSN,SENTRY_RELEASE,DOMAIN
+          envs: LD_SDK_KEY,LD_CLIENT_SIDE_ID,LD_API_TOKEN,LD_PROJECT_KEY,LD_ENV_KEY,SENTRY_DSN,SENTRY_RELEASE,DOMAIN
           script: |
             export PATH="/usr/local/bin:/usr/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
 
@@ -78,13 +83,14 @@ jobs:
 
             echo "=== Injecting secrets into .env ==="
             touch .env
-            for k in LD_SDK_KEY LD_CLIENT_SIDE_ID LD_API_TOKEN LD_PROJECT_KEY SENTRY_DSN SENTRY_RELEASE SENTRY_ENVIRONMENT DB_PATH; do
+            for k in LD_SDK_KEY LD_CLIENT_SIDE_ID LD_API_TOKEN LD_PROJECT_KEY LD_ENV_KEY SENTRY_DSN SENTRY_RELEASE SENTRY_ENVIRONMENT DB_PATH; do
               sed -i "/^$k=/d" .env
             done
             echo "LD_SDK_KEY=$LD_SDK_KEY"               >> .env
             echo "LD_CLIENT_SIDE_ID=$LD_CLIENT_SIDE_ID" >> .env
             echo "LD_API_TOKEN=$LD_API_TOKEN"           >> .env
             echo "LD_PROJECT_KEY=$LD_PROJECT_KEY"       >> .env
+            echo "LD_ENV_KEY=$LD_ENV_KEY"               >> .env
             echo "SENTRY_DSN=$SENTRY_DSN"               >> .env
             echo "SENTRY_RELEASE=$SENTRY_RELEASE"       >> .env
             echo "SENTRY_ENVIRONMENT=production"        >> .env
