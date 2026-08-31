@@ -118,7 +118,12 @@ jobs:
             # Referencing a cert that doesn't exist yet makes `nginx -t` fail and
             # aborts the reload, which would break the very first deploy to a new
             # box. So pick the TLS config only once the cert is actually present.
-            if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+            # NOTE: `sudo test`, not `[ -f ... ]`. This script runs as ec2-user, and
+            # certbot sets /etc/letsencrypt/live to 0700 root:root — traversal needs +x
+            # on every ancestor, so an unprivileged existence check silently returns
+            # false even when the cert is right there. That cost us one confused
+            # deploy: cert present, HTTP-only config chosen anyway.
+            if sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
               echo "Cert found for $DOMAIN — using TLS config"
               sudo cp deployment/nginx-tls.conf /etc/nginx/conf.d/toggle-travel.conf
             else
