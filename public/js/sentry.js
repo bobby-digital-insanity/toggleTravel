@@ -108,6 +108,11 @@ window.TTSentry = (function () {
       Sentry.setTag('traffic_source', isLoadGen() ? 'load-gen' : 'organic');
       Sentry.setTag('plan', resolvePlan());
 
+      // LaunchDarkly's Sentry integration attributes ingested error events via a
+      // custom context named EXACTLY `launchdarklyContext`. Wrong name or absent
+      // context = LD silently drops the event and the guard metric stays empty.
+      setLaunchDarklyContext();
+
       console.log(
         `[Sentry] Initialized — env=${cfg.sentryEnvironment}, replay=${maskedAtInit ? 'masked' : 'readable'}, sessionSample=${sessionSampleRate}`
       );
@@ -150,10 +155,23 @@ window.TTSentry = (function () {
     }
   }
 
+  // Keep the LD context on Sentry events in step with the LD SDK's own context.
+  // Precedence must match api.js sessionKey() and flags.js, or Sentry errors
+  // attribute to a different key than the flag was bucketed on and the guarded
+  // rollout compares the wrong populations.
+  function setLaunchDarklyContext() {
+    if (typeof Sentry === 'undefined') return;
+    try {
+      const key = attributionKey();
+      if (key) Sentry.setContext('launchdarklyContext', { kind: 'user', key });
+    } catch (_) { /* never let telemetry throw */ }
+  }
+
   function identify(email, extras = {}) {
     if (typeof Sentry === 'undefined') return;
     try {
       Sentry.setUser({ email, id: email, ...extras });
+      Sentry.setContext('launchdarklyContext', { kind: 'user', key: email });
       if (extras.tier) Sentry.setTag('plan', extras.tier.charAt(0).toUpperCase() + extras.tier.slice(1));
     } catch (err) {
       console.warn('[Sentry] identify failed:', err.message);
@@ -219,5 +237,5 @@ window.TTSentry = (function () {
     } catch (_) { /* never let reporting throw */ }
   }
 
-  return { init, config, reportFlag, identify, captureException, log, metric, isLoadGen };
+  return { init, config, reportFlag, identify, captureException, log, metric, setLaunchDarklyContext, isLoadGen };
 }());

@@ -16,6 +16,18 @@ function requestLogger(req, res, next) {
   if (sessionId) {
     Sentry.setTag('session_id', sessionId);
     Sentry.setUser({ id: sessionId });
+
+    // ── LaunchDarkly's Sentry integration ────────────────────────────────────
+    // The integration ingests Sentry ERROR events into an LD metric, and it
+    // attributes them using a Sentry custom context that must be named exactly
+    // `launchdarklyContext`. If the name is wrong or the context is missing,
+    // LaunchDarkly silently ignores the event — no warning, the metric just
+    // stays empty. This is the whole reason a guarded rollout can be guarded by
+    // Sentry errors with no custom pipeline.
+    //
+    // The shape mirrors the LD context the SDKs evaluate against, so treatment
+    // and control arms attribute to the same keys the flag was bucketed on.
+    Sentry.setContext('launchdarklyContext', { kind: 'user', key: sessionId });
   }
 
   // Surface the Sentry trace id on the response. public/js/api.js already looks
