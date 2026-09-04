@@ -19,8 +19,18 @@
  *      conductor drives a checkout surge so the guard reaches significance fast,
  *      and force-stops after INCIDENT_AUTO_REVERT_MIN only as a safety net.
  *
+ *   4. AI tier (opt-in, TRAFFIC_AI_ENABLED) — a trickle of AI Planner turns as
+ *      the store personas, ~10% agent mode, under a hard daily token budget, so
+ *      the AI Config / agent graph Monitoring tabs always have traffic.
+ *   5. AI incident (opt-in, INCIDENT_AI_ENABLED) — daily guarded rollout of the
+ *      `bad-prompt` variation of `ai-planner` (a prompt that invents fares),
+ *      guarded by the ai-judge-accuracy metric with auto-rollback; the AI tier
+ *      surges "quote me a fare" questions on fresh identities to feed the guard.
+ *      Mutually exclusive with the ai-planner experiment (both need the
+ *      fallthrough) — the scheduler skips the day when the experiment is running.
+ *
  * Requires LD_API_TOKEN (Writer, scoped to the project) for the incident
- * scheduler only — without it, traffic still runs and incidents are skipped.
+ * schedulers only — without it, traffic still runs and incidents are skipped.
  *
  * Env knobs (defaults):
  *   TRAFFIC_ENABLED=true            master switch — false = idle (process stays up)
@@ -34,6 +44,13 @@
  *   INCIDENT_MONITOR_WINDOW_MIN=5   guarded-rollout monitoring window per stage
  *   INCIDENT_AUTO_REVERT_MIN=20     safety-net backstop if the guard never trips
  *   INCIDENT_TEST_DELAY_MIN         (testing) fire the incident N minutes after boot
+ *   TRAFFIC_AI_ENABLED=false        AI tier master switch (costs real model tokens)
+ *   TRAFFIC_AI_RPH=6                AI turns per hour at peak (diurnally scaled)
+ *   TRAFFIC_AI_AGENT_PCT=10         % of AI turns that use agent mode (~30x the cost)
+ *   TRAFFIC_AI_DAILY_TOKENS=200000  stop for the day once this many tokens were spent
+ *   INCIDENT_AI_ENABLED=false       daily guarded rollout of ai-planner "bad-prompt"
+ *   INCIDENT_AI_HOUR_ET=9           hour (ET) it starts
+ *   INCIDENT_AI_RPM=4               AI turns/minute while the AI incident is live
  *   LD_API_TOKEN / LD_PROJECT_KEY=ToggleTravel / LD_ENV_KEY=launch-darkly / LD_API_BASE
  */
 
@@ -71,6 +88,21 @@ const INCIDENT_API_RPM        = num(process.env.INCIDENT_API_RPM, 15);
 const INCIDENT_CHECKOUT_COUNT = num(process.env.INCIDENT_CHECKOUT_COUNT, 6); // browser checkouts per surge round
 
 let incidentActive = false; // when true: API checkout surge + browser checkout surge feed the guard
+
+// ── AI tier + AI incident (both opt-in: they spend real model tokens) ─────────
+const AI_ENABLED          = (process.env.TRAFFIC_AI_ENABLED ?? 'false') === 'true';
+const AI_RPH              = num(process.env.TRAFFIC_AI_RPH, 6);
+const AI_AGENT_PCT        = num(process.env.TRAFFIC_AI_AGENT_PCT, 10);
+const AI_DAILY_TOKENS     = num(process.env.TRAFFIC_AI_DAILY_TOKENS, 200_000);
+const AI_INCIDENT_ENABLED = (process.env.INCIDENT_AI_ENABLED ?? 'false') === 'true';
+const AI_INCIDENT_HOUR_ET = num(process.env.INCIDENT_AI_HOUR_ET, 9);
+const AI_INCIDENT_RPM     = num(process.env.INCIDENT_AI_RPM, 4);
+const AI_FLAG_KEY         = 'ai-planner';
+const AI_GUARD_METRIC     = 'ai-judge-accuracy';   // created by scripts/ld-ai-planner-setup.js
+const AI_BAD_VARIATION    = 'bad-prompt';          // created by scripts/ld-ai-planner-setup.js
+const AI_EXPERIMENT_KEY   = 'ai-planner-model-quality';
+
+let aiIncidentActive = false; // when true: the AI tier surges fare/flight-status questions on fresh identities
 
 const LOAD_SCRIPT = path.join(__dirname, 'playwright-load.js');
 
@@ -554,6 +586,214 @@ async function incidentLoop() {
   }
 }
 
+// ── AI tier ───────────────────────────────────────────────────────────────────
+
+// The store personas (src/users.js) — the server resolves the tier from the
+// key, so these are real, LD-targetable identities.
+const AI_PERSONAS = [
+  { key: 'silver@toggletravel.io',   tier: 'silver',   name: 'Silver User' },
+  { key: 'gold@toggletravel.io',     tier: 'gold',     name: 'Gold User' },
+  { key: 'platinum@toggletravel.io', tier: 'platinum', name: 'Platinum User' },
+  { key: 'diamond@toggletravel.io',  tier: 'diamond',  name: 'Diamond User' },
+];
+const AI_TIERS = ['beta', 'silver', 'gold', 'platinum', 'diamond'];
+
+const AI_QUESTIONS = [
+  "What's the typical carry-on baggage allowance for an economy flight to Miami?",
+  'Do I need a passport to fly from Denver to Cancun?',
+  "What's the best month to visit Tokyo for cherry blossoms?",
+  'How early should I arrive for a domestic flight?',
+  'Can I bring a full-size sunscreen bottle in my checked bag?',
+  'My flight to Miami was cancelled and I have a cruise the next day — what are my rebooking and refund options, and would insurance cover a hotel?',
+  'I missed my connection because my first flight was delayed three hours; can I get rebooked tonight and am I owed compensation?',
+];
+// Live data no tool can verify: a well-behaved model declines; the bad-prompt
+// variation invents numbers and the accuracy judge fails it.
+const AI_BAD_QUESTIONS = [
+  'How much exactly does it cost to upgrade to first class on the Denver to Miami flight next Friday?',
+  "What's the current status of flight TT-204 from Denver to Miami tonight — is it on time?",
+  'What is the exact price to check a second bag on my Toggle Travel flight to Rome next month?',
+  'Exactly how many window seats are still available on the 8am flight to New York tomorrow?',
+  "What's the cheapest business-class fare to Tokyo next Tuesday, and will my flight be delayed?",
+];
+const AI_AGENT_QUESTIONS = [
+  'Will it rain in Kyoto next week?',
+  'Which of your destinations is the best value per night?',
+  'Is Iceland going to be freezing this week?',
+  'Find me somewhere under $2500 that sits in the 70s next week with no storms and a serious food scene — and tell me whether I should shift my dates.',
+];
+
+let aiIdentitySeq = 0;
+// Fresh identity per incident request: the guarded rollout randomizes on user,
+// so each request must be a new randomization unit to reach significance.
+function newAiIdentity() {
+  aiIdentitySeq += 1;
+  const tier = pick(AI_TIERS);
+  return { key: `${pick(VISITOR_NAMES)}-ai${aiIdentitySeq}@demo.toggletravel.io`, tier, name: `${tier} traveler` };
+}
+
+// Every token a turn spent, from the debug block both modes return.
+function tokensOf(data) {
+  const d = data?.debug || {};
+  const t = (x) => Number(x?.total ?? x?.totalTokens ?? 0);
+  let n = t(d.classifier?.tokens) + t(d.generation?.tokens) + t(d.retry?.tokens);
+  for (const j of d.judges || []) n += t(j.tokens);
+  n += t(d.plan?.tokens) + t(d.compose?.tokens);
+  for (const sp of d.specialists || []) n += t(sp.tokens);
+  return n;
+}
+
+async function aiTurn() {
+  const agent = !aiIncidentActive && Math.random() * 100 < AI_AGENT_PCT;
+  const identity = aiIncidentActive ? newAiIdentity() : pick(AI_PERSONAS);
+  const message = aiIncidentActive ? pick(AI_BAD_QUESTIONS) : pick(agent ? AI_AGENT_QUESTIONS : AI_QUESTIONS);
+  const res = await fetch(`${HOST}/api/ai-planner/${agent ? 'agent-chat' : 'chat'}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-session-id': identity.key,
+      'x-user-key': identity.key,
+      'x-user-tier': identity.tier,
+      'x-user-name': identity.name,
+    },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    await res.arrayBuffer().catch(() => {});
+    log(`ai turn ${agent ? 'AGENT ' : ''}HTTP ${res.status} (${identity.tier})`);
+    return 0;
+  }
+  const data = await res.json();
+  const m = data.meta || {};
+  const j = data.debug?.judge || (data.debug?.judges || []).find((x) => x.kind === 'accuracy');
+  const tokens = tokensOf(data);
+  log(`ai turn ${agent ? 'AGENT ' : ''}${identity.tier} model=${m.model} variation=${m.variationKey} complexity=${m.complexity}${j ? ` judge=${j.verdict}` : ''}${data.debug?.retry?.retried ? ' RETRIED' : ''} tokens=${tokens}`);
+  return tokens;
+}
+
+async function aiLoop() {
+  if (!AI_ENABLED) return log('ai tier: disabled (TRAFFIC_AI_ENABLED=false)');
+  await warmDestinationIds();
+  log(`ai tier: ~${AI_RPH} turns/hour at peak, ${AI_AGENT_PCT}% agent mode, daily budget ${AI_DAILY_TOKENS} tokens`);
+  let dayKey = nowET().dateKey;
+  let spent = 0;
+  for (;;) {
+    const et = nowET();
+    if (et.dateKey !== dayKey) { dayKey = et.dateKey; spent = 0; log('ai tier: new day — token budget reset'); }
+    if (spent >= AI_DAILY_TOKENS && !aiIncidentActive) {
+      await sleep(300_000); // budget spent: idle until tomorrow (an incident overrides)
+      continue;
+    }
+    try {
+      spent += await aiTurn();
+    } catch (err) {
+      log(`ai tier error: ${err.message}`);
+    }
+    const perHour = aiIncidentActive ? AI_INCIDENT_RPM * 60 : Math.max(1, AI_RPH * (0.3 + 0.7 * activityNow()));
+    await sleep(jitter(3_600_000 / perHour));
+  }
+}
+
+// ── AI incident: guarded rollout of a bad prompt on ai-planner ────────────────
+
+async function getAiReleaseState() {
+  const flag = await ldRequest('GET', `/api/v2/flags/${PROJECT_KEY}/${AI_FLAG_KEY}?env=${ENV_KEY}`);
+  const byKey = {};
+  flag.variations.forEach((v, idx) => { const k = v.value?._ldMeta?.variationKey; if (k) byKey[k] = { id: v._id, idx }; });
+  const env = flag.environments?.[ENV_KEY] || {};
+  const ft = env.fallthrough || {};
+  const good = byKey['claude-haiku-4-5'] || byKey['gemini-latest'];
+  const bad = byKey[AI_BAD_VARIATION];
+  return {
+    goodId: good?.id, badId: bad?.id,
+    on: !!env.on,
+    releaseActive: !!(ft.rollout && ft.rollout.experimentAllocation),
+    servingGood: typeof ft.variation === 'number' && good && ft.variation === good.idx,
+    servingBad: typeof ft.variation === 'number' && bad && ft.variation === bad.idx,
+  };
+}
+
+async function aiExperimentRunning() {
+  try {
+    const exp = await ldRequest('GET', `/api/v2/projects/${PROJECT_KEY}/environments/${ENV_KEY}/experiments/${AI_EXPERIMENT_KEY}`);
+    return !!exp.currentIteration && exp.currentIteration.status === 'running';
+  } catch (err) {
+    if (err.status === 404) return false;
+    throw err;
+  }
+}
+
+function aiPatchFlag(instructions, comment) {
+  return ldRequest('PATCH', `/api/v2/flags/${PROJECT_KEY}/${AI_FLAG_KEY}`, {
+    semanticPatch: true, beta: true,
+    body: { environmentKey: ENV_KEY, comment, instructions },
+  });
+}
+
+async function aiIncidentLoop() {
+  if (!AI_INCIDENT_ENABLED) return log('ai incident: disabled (INCIDENT_AI_ENABLED=false)');
+  if (!LD_TOKEN) return log('ai incident: LD_API_TOKEN not set — skipped');
+  if (!AI_ENABLED) log('ai incident: TRAFFIC_AI_ENABLED=false — the guard will only see organic traffic');
+
+  let firedForDate = null;
+  let backstopDeadline = null;
+  log(`ai incident: guarded rollout of ${AI_FLAG_KEY}/${AI_BAD_VARIATION} daily at ${String(AI_INCIDENT_HOUR_ET).padStart(2, '0')}:00 ET, guarded by ${AI_GUARD_METRIC}`);
+
+  for (;;) {
+    try {
+      const et = nowET();
+      const shouldFire = et.hour === AI_INCIDENT_HOUR_ET && et.minute < 2 && firedForDate !== et.dateKey;
+      if (shouldFire && !aiIncidentActive) {
+        firedForDate = et.dateKey;
+        if (await aiExperimentRunning()) {
+          log(`ai incident: experiment ${AI_EXPERIMENT_KEY} is running on the same fallthrough — skipping today`);
+        } else {
+          let state = await getAiReleaseState();
+          if (!state.goodId || !state.badId) throw new Error(`${AI_FLAG_KEY}: variations not found (run scripts/ld-ai-planner-setup.js)`);
+          if (state.releaseActive) {
+            await aiPatchFlag([{ kind: 'stopAutomatedRelease', finalVariationId: state.goodId }], 'Clearing prior AI guarded rollout before re-arming');
+            state = await getAiReleaseState();
+          }
+          if (!state.on) await aiPatchFlag([{ kind: 'turnFlagOn' }], 'AI guarded rollout demo: flag on');
+          if (!state.servingGood) await aiPatchFlag([{ kind: 'updateFallthroughVariationOrRollout', variationId: state.goodId }], 'AI guarded rollout demo: reset to the good prompt');
+          await aiPatchFlag([{
+            kind: 'startAutomatedRelease',
+            releaseKind: 'guarded',
+            originalVariationId: state.goodId,
+            targetVariationId: state.badId,
+            randomizationUnit: 'user',
+            stages: [{ allocation: GUARDED_ALLOCATION, durationMillis: MONITOR_WINDOW_MIN * 60_000 }],
+            metrics: [{ key: AI_GUARD_METRIC, isGroup: false }],
+            metricMonitoringPreferences: { [AI_GUARD_METRIC]: { autoRollback: true } },
+          }], 'Deploy: AI Planner prompt v2 — guarded rollout at 50%, guarded by the accuracy judge');
+          aiIncidentActive = true;
+          backstopDeadline = Date.now() + AUTO_REVERT_MIN * 60_000;
+          log(`🔥 AI guarded rollout started — ${AI_BAD_VARIATION} at 50%, guarded by ${AI_GUARD_METRIC}; AI surge ON`);
+        }
+      }
+
+      if (aiIncidentActive) {
+        const state = await getAiReleaseState();
+        if (!state.releaseActive) {
+          aiIncidentActive = false;
+          backstopDeadline = null;
+          log(state.servingBad
+            ? '⚠ AI guarded rollout completed (rolled forward to the bad prompt) — surge OFF'
+            : '✅ AI guarded rollout auto-rolled-back by LaunchDarkly — accuracy judge caught the invented fares, surge OFF');
+        } else if (backstopDeadline && Date.now() >= backstopDeadline) {
+          await aiPatchFlag([{ kind: 'stopAutomatedRelease', finalVariationId: state.goodId }], 'Safety-net backstop: stopping AI rollout after timeout');
+          aiIncidentActive = false;
+          backstopDeadline = null;
+          log('🛑 AI safety-net backstop fired — guarded rollout stopped, surge OFF');
+        }
+      }
+    } catch (err) {
+      log(`ai incident error: ${err.message}`);
+    }
+    await sleep(aiIncidentActive ? 20_000 : 30_000);
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 process.on('SIGTERM', shutdown);
@@ -585,7 +825,7 @@ async function main() {
       .catch((err) => log(`ai-setup error (non-fatal): ${err.message}`));
   }
 
-  await Promise.all([browserLoop(), apiLoop(), incidentLoop()]);
+  await Promise.all([browserLoop(), apiLoop(), incidentLoop(), aiLoop(), aiIncidentLoop()]);
 }
 
 main().catch((err) => {

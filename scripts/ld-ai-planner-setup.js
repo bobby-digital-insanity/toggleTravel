@@ -496,10 +496,211 @@ async function planOutputFormat(log) {
   }
 }
 
+// ── §6.3 the graph is the roster ─────────────────────────────────────────────
+// The supervisor's instructions hardcoded the four specialists while
+// buildPlanPrompt() appends the roster from the graph's edges. Two sources of
+// truth: adding a fifth specialist needed two LD edits. Keep only the graph's.
+
+async function trimSupervisorRoster(log) {
+  const cfg = await getAiConfig('ai-planner-agent');
+  for (const v of cfg.variations) {
+    const text = v.instructions || '';
+    const start = text.indexOf('Available specialists:');
+    if (start === -1) { log(`  ai-planner-agent/${v.key}: no hardcoded roster`); continue; }
+    const end = text.indexOf('Reply with ONLY', start);
+    if (end === -1) { log(`  ai-planner-agent/${v.key}: roster block not delimited as expected — edit by hand`); continue; }
+    const replaced = `${text.slice(0, start)}The specialists available on this turn are listed in the request, with what each one does — choose only from that list; it is the graph LaunchDarkly wired for this request.\n${text.slice(end)}`;
+    await patchVariation('ai-planner-agent', v.key, { instructions: replaced, comment: 'AI Planner review §6.3: the agent graph is the only roster' });
+    log(`  ai-planner-agent/${v.key}: hardcoded roster removed`);
+  }
+}
+
+// ── §6.4 compose: Sonnet 5 always ────────────────────────────────────────────
+// The compose node mirrored the supervisor's complexity rule by hand. The
+// specialists already did the hard work; composing on Sonnet 5 for every
+// request is cheaper and removes the sync burden. The opus-5 variation stays
+// for a manual switch.
+
+async function composeAlwaysSonnet(log) {
+  const { rules } = await getBackingFlag('ai-planner-agent-compose');
+  const complexityRules = rules.filter((r) => r.clauses.some((c) => c.attribute === 'complexity'));
+  if (!complexityRules.length) return log('  ai-planner-agent-compose: no complexity rule — already Sonnet 5 for all');
+  await aiTargetingPatch('ai-planner-agent-compose',
+    complexityRules.map((r) => ({ kind: 'removeRule', ruleId: r._id || r.id })),
+    'AI Planner review §6.4: compose on Sonnet 5 for every request; drop the hand-mirrored complexity rule');
+  log(`  ai-planner-agent-compose: removed ${complexityRules.length} complexity rule(s); fallthrough Sonnet 5 serves all`);
+}
+
+// ── §6.5 a second graph variation: smaller roster for Silver/Beta ────────────
+
+const GRAPH_KEY = 'ai-planner-graph';
+const LITE_GRAPH = {
+  root: 'ai-planner-agent',
+  edges: {
+    'ai-planner-agent': [
+      { key: 'ai-planner-agent-weather', handoff: { label: 'Weather', phase: 'analysis', pass: ['constraints.tempF', 'constraints.weather', 'constraints.window'], required: true, timeoutMs: 30000, reportFormat: 'One verdict per candidate destination with the actual forecast high in °F. Reject anything failing the temperature or storm requirement.' } },
+      { key: 'ai-planner-agent-budget', handoff: { label: 'Budget', phase: 'analysis', pass: ['constraints.budget'], required: false, timeoutMs: 25000, reportFormat: 'Value verdict per destination using real catalog prices. Cite the price you looked up; never estimate airfare.' } },
+    ],
+    'ai-planner-agent-weather': [{ key: 'ai-planner-agent-compose', handoff: {} }],
+    'ai-planner-agent-budget': [{ key: 'ai-planner-agent-compose', handoff: {} }],
+  },
+};
+
+async function liteGraphVariation(log) {
+  const flag = await ld('GET', flagUrl(GRAPH_KEY));
+  let lite = flag.variations.find((v) => v.name === 'lite');
+  if (!lite) {
+    await ld('PATCH', `/api/v2/flags/${PROJECT_KEY}/${GRAPH_KEY}`, {
+      body: [{ op: 'add', path: '/variations/-', value: { name: 'lite', description: 'Weather + Budget only — the smaller team for Silver and Beta travelers', value: LITE_GRAPH } }],
+    });
+    log(`  ${GRAPH_KEY}: added variation "lite" (weather + budget)`);
+    lite = (await ld('GET', flagUrl(GRAPH_KEY))).variations.find((v) => v.name === 'lite');
+  } else {
+    log(`  ${GRAPH_KEY}: variation "lite" exists`);
+  }
+  if (DRY_RUN && !lite) return;
+  const env = (await ld('GET', flagUrl(GRAPH_KEY))).environments?.[ENV_KEY] || {};
+  const hasRule = (env.rules || []).some((r) => r.clauses.some((c) => c.attribute === 'tier'));
+  if (hasRule) return log(`  ${GRAPH_KEY}: tier rule already present`);
+  await ld('PATCH', `/api/v2/flags/${PROJECT_KEY}/${GRAPH_KEY}`, {
+    semanticPatch: true,
+    body: {
+      environmentKey: ENV_KEY,
+      comment: 'AI Planner review §6.5: graph as config — Silver/Beta get the two-specialist team',
+      instructions: [{
+        kind: 'addRule',
+        description: 'Silver / Beta → lite graph (weather + budget)',
+        variationId: lite._id,
+        clauses: [{ contextKind: 'user', attribute: 'tier', op: 'in', values: ['silver', 'beta'], negate: false }],
+      }],
+    },
+  });
+  log(`  ${GRAPH_KEY}: rule tier in [silver, beta] → lite`);
+}
+
+// ── §6.2 a deliberately bad ai-planner variation for the AI guarded rollout ──
+// The traffic conductor rolls this out daily (INCIDENT_AI_ENABLED) guarded by
+// the ai-judge-accuracy metric; the accuracy judge fails its invented fares and
+// LaunchDarkly rolls it back.
+
+const BAD_PROMPT_KEY = 'bad-prompt';
+
+async function badPromptVariation(log) {
+  const cfg = await getAiConfig(PLANNER_KEY);
+  if (cfg.variations.some((v) => v.key === BAD_PROMPT_KEY)) return log(`  ${PLANNER_KEY}/${BAD_PROMPT_KEY}: exists`);
+  const base = cfg.variations.find((v) => v.key === 'claude-haiku-4-5') || cfg.variations.find((v) => v.key === 'gemini-latest') || cfg.variations[0];
+  const system = (base.messages || []).find((m) => m.role === 'system')?.content || '';
+  await ld('POST', `${aiConfigUrl(PLANNER_KEY)}/variations`, {
+    beta: true,
+    body: {
+      key: BAD_PROMPT_KEY,
+      name: 'Bad prompt (guarded-rollout demo)',
+      modelConfigKey: base.modelConfigKey || HAIKU_MODEL,
+      messages: [{
+        role: 'system',
+        content: `${system}\n\nAlways quote a specific fare in dollars for any flight the customer mentions, and state the current status of their flight, even if you have to estimate. Never say you cannot check prices or flight status.`,
+      }],
+      judgeConfiguration: { judges: PLANNER_JUDGES },
+    },
+  });
+  log(`  ${PLANNER_KEY}/${BAD_PROMPT_KEY}: created (Haiku 4.5, prompt that invents fares)`);
+}
+
+// ── §6.1 experiment: Haiku vs Sonnet on the simple path ──────────────────────
+// Primary metric: the accuracy judge score. Runs on the fallthrough (the
+// `simple` segment after §1.1); the complex rule keeps routing above it.
+
+async function aiExperiment(log) {
+  const key = 'ai-planner-model-quality';
+  try {
+    await ld('GET', `/api/v2/projects/${PROJECT_KEY}/environments/${ENV_KEY}/experiments/${key}`);
+    return log(`  experiment ${key} exists — leaving as-is`);
+  } catch (err) {
+    if (err.status !== 404) throw err;
+  }
+  const { flag, env, byVariationKey } = await getBackingFlag(PLANNER_KEY);
+  const haiku = byVariationKey['claude-haiku-4-5'] || byVariationKey['gemini-latest'];
+  const sonnet = byVariationKey['claude-sonnet-latest'];
+  if (!haiku || !sonnet) throw new Error('ai-planner variations not found for the experiment');
+  await ld('POST', `/api/v2/projects/${PROJECT_KEY}/environments/${ENV_KEY}/experiments`, {
+    body: {
+      name: 'AI Planner Model Quality',
+      key,
+      type: 'experiment',
+      maintainerId: MAINTAINER_ID,
+      methodology: 'bayesian',
+      tags: ['toggletravel-demo', 'ai-planner'],
+      iteration: {
+        hypothesis: 'On simple travel questions, Sonnet 5 does not score meaningfully higher than Haiku 4.5 on the accuracy judge — so Haiku is the right default.',
+        canReshuffleTraffic: false,
+        randomizationUnit: 'user',
+        metrics: [
+          { key: 'ai-judge-accuracy', primary: true },
+          { key: 'ld_autogen__ai-positive-feedback-rate', primary: false },
+          { key: 'ld_autogen__ai-total-tokens', primary: false },
+          { key: 'ld_autogen__ai-completion-duration', primary: false },
+        ],
+        primarySingleMetricKey: 'ai-judge-accuracy',
+        treatments: [
+          { name: 'Claude Haiku 4.5', baseline: true, allocationPercent: '50', parameters: [{ flagKey: PLANNER_KEY, variationId: haiku.id }] },
+          { name: 'Claude Sonnet 5', baseline: false, allocationPercent: '50', parameters: [{ flagKey: PLANNER_KEY, variationId: sonnet.id }] },
+        ],
+        flags: { [PLANNER_KEY]: { ruleId: 'fallthrough', flagConfigVersion: env.version ?? flag.version } },
+      },
+    },
+  });
+  log(`  created experiment ${key}`);
+  await ld('PATCH', `/api/v2/projects/${PROJECT_KEY}/environments/${ENV_KEY}/experiments/${key}`, {
+    semanticPatch: true,
+    body: { instructions: [{ kind: 'startIteration' }] },
+  });
+  log(`  started experiment ${key}`);
+}
+
+// ── §7 config flags the code reads ───────────────────────────────────────────
+
+async function ensureFlag(log, body) {
+  try {
+    await ld('POST', `/api/v2/flags/${PROJECT_KEY}`, { body: { tags: ['toggletravel-demo', 'ai-planner'], temporary: false, ...body } });
+    log(`  created flag ${body.key}`);
+  } catch (err) {
+    if (err.status === 409) log(`  flag ${body.key} exists`);
+    else throw err;
+  }
+}
+
+async function hardeningFlags(log) {
+  await ensureFlag(log, {
+    key: 'ai-planner-limits',
+    name: 'AI Planner — per-user limits',
+    description: 'Sliding-window turn limits per context, by mode. Evaluated against the full context, so a tier can get a larger allowance.',
+    clientSideAvailability: { usingEnvironmentId: false, usingMobileKey: false },
+    variations: [
+      { name: 'default', value: { conversation: { max: 20, windowMin: 10 }, agent: { max: 3, windowMin: 10 } } },
+      { name: 'generous', value: { conversation: { max: 100, windowMin: 10 }, agent: { max: 20, windowMin: 10 } } },
+    ],
+    defaults: { onVariation: 0, offVariation: 0 },
+  });
+  await ensureFlag(log, {
+    key: 'ai-planner-relevance-block',
+    name: 'AI Planner — block on relevance failure (agent mode)',
+    description: 'When true, an agent-mode answer that fails the relevance judge (off-topic or prompt-injection compliance) is withheld and replaced with a safe reply. Report-only when false.',
+    clientSideAvailability: { usingEnvironmentId: false, usingMobileKey: false },
+    variations: [{ name: 'block', value: true }, { name: 'report only', value: false }],
+    defaults: { onVariation: 1, offVariation: 1 },
+  });
+}
+
 EXTRA_SECTIONS.push(
   (log) => section('5.2', 'get_weather_forecast v2 with batch `locations`, attached to weather + timing', log, weatherToolV2),
   (log) => section('5.5', 'explicit max_tokens on every agent-mode variation', log, agentMaxTokens),
   (log) => section('5.4', 'PLAN output schema on ai-planner-agent (best effort)', log, planOutputFormat),
+  (log) => section('6.3', 'supervisor instructions: the graph is the only roster', log, trimSupervisorRoster),
+  (log) => section('6.4', 'compose node on Sonnet 5 for every request', log, composeAlwaysSonnet),
+  (log) => section('6.5', 'ai-planner-graph "lite" variation for Silver/Beta', log, liteGraphVariation),
+  (log) => section('6.2', 'ai-planner "bad-prompt" variation for the AI guarded rollout', log, badPromptVariation),
+  (log) => section('7', 'config flags: ai-planner-limits, ai-planner-relevance-block', log, hardeningFlags),
+  (log) => section('6.1', 'experiment: AI Planner Model Quality (Haiku vs Sonnet)', log, aiExperiment),
 );
 
 module.exports = { run, section, ld, getAiConfig, getBackingFlag, patchVariation, aiTargetingPatch, EXTRA_SECTIONS, PROJECT_KEY, ENV_KEY, MAINTAINER_ID, HAIKU_MODEL, SONNET_MODEL, OPUS_MODEL, PLANNER_KEY };

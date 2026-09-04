@@ -23,7 +23,7 @@
  * what the agents are doing instead of a spinner.
  */
 
-const { getRawClient, getGraphMeta, trackFor } = require('../launchdarkly');
+const { getRawClient, getGraphMeta, trackFor, getFlagFor } = require('../launchdarkly');
 const { GRAPH_KEY, resolveAgentGraph, instrumentTools, createGraphRun } = require('../aiGraph');
 const { TOOL_REGISTRY } = require('../tools');
 const { userOf, describeContext } = require('../ai/context');
@@ -447,6 +447,20 @@ async function runAgentTurn({ message, context, variables, onEvent = () => {}, s
     }
     judgeResults = await judges.applyThresholds(judgeResults, context);
 
+    // Relevance in agent mode can BLOCK, not just report: the answer has not
+    // been shown yet. Whether it does is the LD boolean flag
+    // `ai-planner-relevance-block` (default report-only), so the safety
+    // posture is a flag flip, not a deploy. The withheld text stays in the dev
+    // view so the demo can show what the judge caught.
+    let reply = composeRun.response || '';
+    let blocked = null;
+    const relevance = judges.relevanceOf(judgeResults);
+    if (relevance?.verdict === 'fail' && await getFlagFor('ai-planner-relevance-block', false, context)) {
+      blocked = { reason: relevance.reasoning || null, score: relevance.score, withheldReply: reply };
+      reply = "I can only help with planning your trip — destinations, dates, budget and what to expect when you get there. Ask me about any of those and I'll get the team on it.";
+      logger.warn('ai_planner_relevance_blocked', { config_key: composeNode.key, score: relevance.score });
+    }
+
     // Custom LD metric events — how much machinery a turn actually used. Three
     // events because one event can carry only one numeric value: the LD
     // metrics `ai-planner-agent-turn` (count), `ai-planner-agent-specialists`
@@ -480,9 +494,10 @@ async function runAgentTurn({ message, context, variables, onEvent = () => {}, s
     });
 
     return {
-      reply: composeRun.response || '',
+      reply,
       meta: {
         mode: 'agent',
+        blocked: !!blocked,
         // The config that actually wrote the reply the customer reads — the
         // composer, not the planner — matching what the banner shows for
         // conversation mode (the config that generated the text).
@@ -534,6 +549,7 @@ async function runAgentTurn({ message, context, variables, onEvent = () => {}, s
           durationMs: Date.now() - composeStarted,
         },
         judgeSource,
+        blocked,
         judges: judgeResults.map((j) => ({
           configKey: j.configKey, kind: j.kind, metricKey: j.metricKey || null, model: j.model || null,
           variationKey: j.variationKey || null, version: j.version ?? null,
