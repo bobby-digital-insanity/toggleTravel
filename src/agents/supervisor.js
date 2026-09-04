@@ -29,6 +29,15 @@ const logger = require('../logger');
 // Fallback only — a specialist whose edge carries no timeoutMs.
 const SPECIALIST_TIMEOUT_MS = Number(process.env.AGENT_SPECIALIST_TIMEOUT_MS || 60000);
 
+// The COMPOSE phase runs as its own agent config/graph node — a sibling of the
+// specialists, not a second call against the root. Splitting it out (instead
+// of calling the root node twice, once for PLAN and once for COMPOSE) means
+// the agent graph is a real DAG (root -> specialists -> compose) rather than a
+// cycle that draws the same "Supervisor" box twice in the LD graph UI with
+// identical Monitoring numbers for both. It also gives PLAN and COMPOSE their
+// own separate duration/token/error stats instead of one blended total.
+const COMPOSE_KEY = 'ai-planner-agent-compose';
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -212,6 +221,14 @@ async function runAgentTurn({ message, context, variables }) {
 
   const root = def.root;
   const roster = buildRoster(def, root);
+  // Graceful degrade: an older/unrewired graph (root -> specialists only, no
+  // compose node) falls back to running COMPOSE on the root, matching the
+  // previous behavior — the graph still works, it just draws the duplicate
+  // Supervisor box again until the graph is rewired.
+  const composeNode = def.getNode(COMPOSE_KEY) || root;
+  if (composeNode === root) {
+    logger.warn('ai_agent_compose_node_missing', { config_key: COMPOSE_KEY, message: 'Falling back to the root node for COMPOSE — add the compose node + edges to the agent graph.' });
+  }
   const graphMeta = await getGraphMeta(GRAPH_KEY, context);
   const run = createGraphRun(getRawClient(), context, graphMeta);
 
@@ -248,8 +265,11 @@ async function runAgentTurn({ message, context, variables }) {
     const findings = await Promise.all(chosen.map((entry) => runSpecialist(def, root, entry, message, plan, variables)));
 
     // ── 3. COMPOSE ──────────────────────────────────────────────────────────
+    // Runs on its own node (see COMPOSE_KEY above), not a second call against
+    // the root — that's what keeps PLAN and COMPOSE as two distinct boxes with
+    // two distinct Monitoring histories in the LD graph UI.
     const composeStarted = Date.now();
-    const composeRun = await def.runNode(root, buildComposePrompt(message, findings, variables), { variables });
+    const composeRun = await def.runNode(composeNode, buildComposePrompt(message, findings, variables), { variables });
 
     const toolCallCount = findings.reduce((n, f) => n + (f.toolCalls?.length || 0), 0);
     const totalTokens = [planRun, composeRun].reduce((n, r) => n + (r.usage?.total || 0), 0)
@@ -257,7 +277,7 @@ async function runAgentTurn({ message, context, variables }) {
 
     // Graph-level metrics for the whole workflow. Node-level duration, tokens,
     // tool calls and per-edge handoffs are already tracked by runNode().
-    run.path([root.key, ...findings.map((f) => f.configKey), root.key]);
+    run.path([root.key, ...findings.map((f) => f.configKey), composeNode.key]);
     run.duration(Date.now() - startedAt);
     run.tokens(totalTokens);
     run.success();
@@ -268,7 +288,8 @@ async function runAgentTurn({ message, context, variables }) {
       specialists: chosen.map((r) => r.name).join(','),
       specialist_count: chosen.length,
       tool_calls: toolCallCount,
-      supervisor_model: root.config?.model?.name || null,
+      plan_model: root.config?.model?.name || null,
+      compose_model: composeNode.config?.model?.name || null,
       complexity: context.complexity || null,
     });
 
@@ -277,7 +298,8 @@ async function runAgentTurn({ message, context, variables }) {
       specialists: chosen.map((r) => r.name),
       specialist_count: chosen.length,
       tool_calls: toolCallCount,
-      supervisor_model: root.config?.model?.name || null,
+      plan_model: root.config?.model?.name || null,
+      compose_model: composeNode.config?.model?.name || null,
       complexity: context.complexity || null,
       failed_specialists: findings.filter((f) => f.error).map((f) => f.name),
       total_tokens: totalTokens,
@@ -288,10 +310,13 @@ async function runAgentTurn({ message, context, variables }) {
       reply: composeRun.response || '',
       meta: {
         mode: 'agent',
-        configKey: root.key,
+        // The config that actually wrote the reply the customer reads — the
+        // composer, not the planner — matching what the banner shows for
+        // conversation mode (the config that generated the text).
+        configKey: composeNode.key,
         graphKey: GRAPH_KEY,
-        model: root.config?.model?.name || null,
-        parameters: root.config?.model?.parameters || {},
+        model: composeNode.config?.model?.name || null,
+        parameters: composeNode.config?.model?.parameters || {},
         complexity: context.complexity || null,
         specialists: chosen.map((r) => r.name),
         toolCalls: toolCallCount,
@@ -306,10 +331,11 @@ async function runAgentTurn({ message, context, variables }) {
         graph: {
           key: GRAPH_KEY,
           root: root.key,
+          composeKey: composeNode.key,
           variationKey: graphMeta.variationKey || null,
           version: graphMeta.version || null,
           runId: run.trackData.runId,
-          nodes: roster.length + 1,
+          nodes: roster.length + 2,
           edges: roster.map((r) => ({ key: r.edgeKey, target: r.node.key, handoff: r.handoff })),
         },
         plan: planDebug,
@@ -320,9 +346,9 @@ async function runAgentTurn({ message, context, variables }) {
           content: f.content || null,
         })),
         compose: {
-          configKey: root.key,
+          configKey: composeNode.key,
           phase: 'compose',
-          model: root.config?.model?.name || null,
+          model: composeNode.config?.model?.name || null,
           tokens: usageOf(composeRun),
           durationMs: Date.now() - composeStarted,
         },
