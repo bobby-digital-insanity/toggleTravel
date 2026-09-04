@@ -21,9 +21,10 @@
  * still uses the older `@launchdarkly/server-sdk-ai`.
  */
 
-const { getRawClient, getGraphMeta, track } = require('../launchdarkly');
+const { getRawClient, getGraphMeta, trackFor } = require('../launchdarkly');
 const { GRAPH_KEY, resolveAgentGraph, instrumentTools, createGraphRun } = require('../aiGraph');
 const { TOOL_REGISTRY } = require('../tools');
+const { userOf, describeContext } = require('../ai/context');
 const logger = require('../logger');
 
 // Fallback only — a specialist whose edge carries no timeoutMs.
@@ -143,6 +144,13 @@ function usageOf(result) {
   return { input: u.input ?? 0, output: u.output ?? 0, total: u.total ?? 0 };
 }
 
+// The variation LaunchDarkly served for a graph node — the on-stage proof that
+// LD (a targeting rule on the node's own AI Config) picked this model, not the
+// code. The new SDK keeps it on the node's `_ldMeta`.
+function servedVariation(node) {
+  return { variationKey: node?.meta?.variationKey || null, version: node?.meta?.version ?? null };
+}
+
 // Run one specialist node end to end. Never throws: a specialist that fails
 // becomes a finding the supervisor is told to acknowledge rather than paper
 // over. `from` makes runNode emit the graph handoff event for this edge.
@@ -164,6 +172,7 @@ async function runSpecialist(def, root, entry, message, plan, variables) {
       name: entry.name,
       label: entry.label,
       configKey: entry.node.key,
+      ...servedVariation(entry.node),
       model: entry.node.config?.model?.name || null,
       content: result.response || '',
       toolCalls,
@@ -176,6 +185,7 @@ async function runSpecialist(def, root, entry, message, plan, variables) {
       name: entry.name,
       label: entry.label,
       configKey: entry.node.key,
+      ...servedVariation(entry.node),
       model: entry.node.config?.model?.name || null,
       toolCalls,
       error: err.message,
@@ -250,6 +260,7 @@ async function runAgentTurn({ message, context, variables }) {
 
     const planDebug = {
       configKey: root.key,
+      ...servedVariation(root),
       phase: 'plan',
       model: root.config?.model?.name || null,
       constraints: plan?.constraints || null,
@@ -282,16 +293,24 @@ async function runAgentTurn({ message, context, variables }) {
     run.tokens(totalTokens);
     run.success();
 
-    // Custom LD metric event — how much machinery a turn actually used.
-    track('ai-planner-agent-turn', context.key, {
+    // Custom LD metric events — how much machinery a turn actually used. Three
+    // events because one event can carry only one numeric value: the LD
+    // metrics `ai-planner-agent-turn` (count), `ai-planner-agent-specialists`
+    // and `ai-planner-agent-tool-calls` (numeric, lower is better) are keyed to
+    // these. Against the full context, so they can be broken down by tier.
+    const complexity = userOf(context).complexity || null;
+    const turnData = {
       graph_key: GRAPH_KEY,
       specialists: chosen.map((r) => r.name).join(','),
       specialist_count: chosen.length,
       tool_calls: toolCallCount,
       plan_model: root.config?.model?.name || null,
       compose_model: composeNode.config?.model?.name || null,
-      complexity: context.complexity || null,
-    });
+      complexity,
+    };
+    trackFor('ai-planner-agent-turn', context, turnData);
+    trackFor('ai-planner-agent-specialists', context, turnData, chosen.length);
+    trackFor('ai-planner-agent-tool-calls', context, turnData, toolCallCount);
 
     logger.info('ai_planner_agent_turn', {
       graph_key: GRAPH_KEY,
@@ -300,7 +319,7 @@ async function runAgentTurn({ message, context, variables }) {
       tool_calls: toolCallCount,
       plan_model: root.config?.model?.name || null,
       compose_model: composeNode.config?.model?.name || null,
-      complexity: context.complexity || null,
+      complexity,
       failed_specialists: findings.filter((f) => f.error).map((f) => f.name),
       total_tokens: totalTokens,
       duration_ms: Date.now() - startedAt,
@@ -314,19 +333,23 @@ async function runAgentTurn({ message, context, variables }) {
         // composer, not the planner — matching what the banner shows for
         // conversation mode (the config that generated the text).
         configKey: composeNode.key,
+        ...servedVariation(composeNode),
         graphKey: GRAPH_KEY,
         model: composeNode.config?.model?.name || null,
         parameters: composeNode.config?.model?.parameters || {},
-        complexity: context.complexity || null,
+        complexity,
         specialists: chosen.map((r) => r.name),
         toolCalls: toolCallCount,
       },
       // The new SDK has no resumption token; the compose call's trackData is
       // what attributes deferred feedback to this run, so hand that back.
       feedbackToken: Buffer.from(JSON.stringify(composeRun.trackData || {})).toString('base64url'),
+      // Same trackData, un-encoded, so the route can attribute judge scores to
+      // the compose node's run (and through graphKey, to the graph run).
+      trackData: composeRun.trackData || null,
       debug: {
         mode: 'agent',
-        context: { key: context.key, name: context.name || null, tier: context.tier || null, complexity: context.complexity || null },
+        context: describeContext(context),
         promptVariables: variables,
         graph: {
           key: GRAPH_KEY,
@@ -341,12 +364,14 @@ async function runAgentTurn({ message, context, variables }) {
         plan: planDebug,
         specialists: findings.map((f) => ({
           name: f.name, label: f.label, configKey: f.configKey, model: f.model || null,
+          variationKey: f.variationKey || null, version: f.version ?? null,
           toolCalls: f.toolCalls || [], tokens: f.tokens || null,
           durationMs: f.durationMs, error: f.error || null,
           content: f.content || null,
         })),
         compose: {
           configKey: composeNode.key,
+          ...servedVariation(composeNode),
           phase: 'compose',
           model: composeNode.config?.model?.name || null,
           tokens: usageOf(composeRun),

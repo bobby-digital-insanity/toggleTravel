@@ -570,6 +570,17 @@
           pill.appendChild(val);
           mbParams.appendChild(pill);
         });
+        // The variation LD actually served — the proof that LaunchDarkly made
+        // the model decision. Read straight off the config's track data.
+        if (meta.variationKey) {
+          const pill = document.createElement('span');
+          pill.className = 'mb-pill';
+          pill.appendChild(document.createTextNode('variation: '));
+          const val = document.createElement('b');
+          val.textContent = meta.variationKey + (meta.version != null ? ' v' + meta.version : '');
+          pill.appendChild(val);
+          mbParams.appendChild(pill);
+        }
         if (lastComplexity) {
           const pill = document.createElement('span');
           pill.className = 'mb-pill';
@@ -699,7 +710,11 @@
         appendMeta('🔀 Routing — before the answer', [
           ['context.key', d.context?.key],
           ['context.tier', d.context?.tier, true],
+          ['tier resolved from', d.context?.tierSource === 'header' ? 'x-user-tier header (unverified key)' : (d.context?.tier ? 'server-side user store' : null)],
+          ['context.anonymous', d.context?.anonymous ? 'true' : null],
+          ['session.key', d.context?.session],
           ['classifier config', d.classifier?.configKey],
+          ['classifier variation', fmtVariation(d.classifier)],
           ['classifier model', d.classifier?.model],
           ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
           ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
@@ -728,8 +743,9 @@
         const p = d.plan || {};
         appendMeta('🧭 Supervisor — PLAN phase', [
           ['LD AI Config', p.configKey],
+          ['LD served variation', fmtVariation(p), true],
+          ['context.complexity', d.context?.complexity],
           ['model', p.model],
-          ['routed by', 'targeting rule on context.complexity = ' + (d.context?.complexity || '?')],
           ['constraints', p.constraints ? JSON.stringify(p.constraints) : null],
           ['specialists chosen', (p.specialists || []).join(', ') || 'none'],
           ['chosen from', (d.graph?.edges || []).length ? (d.graph.edges.length + ' available on the graph') : null],
@@ -745,6 +761,7 @@
           const toolSummary = Object.keys(counts).map((k) => k + ' ×' + counts[k]).join(', ');
           appendMeta('🛠 ' + sp.label + ' specialist', [
             ['LD AI Config', sp.configKey],
+            ['LD served variation', fmtVariation(sp), true],
             ['model', sp.model],
             ['tools called', toolSummary || 'none'],
             ['tool calls', calls.length || null],
@@ -762,6 +779,7 @@
         const m = data.meta || {};
         appendMeta('🧠 Supervisor — COMPOSE phase', [
           ['LD AI Config', c.configKey],
+          ['LD served variation', fmtVariation(c), true],
           ['model', c.model],
           ['specialists consulted', (m.specialists || []).length || 0],
           ['total tool calls', m.toolCalls ?? null],
@@ -775,6 +793,7 @@
             : '⚖️ Judge — scored the answer';
           appendMeta(title, [
             ['judge config', j.configKey],
+            ['judge variation', fmtVariation(j)],
             ['metric', j.metricKey],
             ['judge model', j.model],
             ['score', j.score != null ? j.score.toFixed(2) + (j.threshold != null ? ' (threshold ' + j.threshold + ')' : '') : null],
@@ -790,6 +809,13 @@
       function fmtTokens(t) {
         if (!t) return null;
         return 'in ' + (t.inputTokens ?? '?') + ' · out ' + (t.outputTokens ?? '?') + ' · total ' + (t.totalTokens ?? '?');
+      }
+
+      // "claude-sonnet-latest (v10)" — the variation LD served plus its version.
+      // Null when LD was unreachable and a local fallback config answered.
+      function fmtVariation(o) {
+        if (!o || !o.variationKey) return null;
+        return o.variationKey + (o.version != null ? ' (v' + o.version + ')' : '');
       }
 
       // Agent-mode metrics come from the LD AI SDK as LDTokenUsage
@@ -901,6 +927,11 @@
               ['context.key', d.context?.key],
               ['context.name', d.context?.name],
               ['context.tier', d.context?.tier, true],
+              // The tier is resolved server-side from the user store; a header
+              // that disagrees is ignored (see src/ai/context.js).
+              ['tier resolved from', d.context?.tierSource === 'header' ? 'x-user-tier header (unverified key)' : (d.context?.tier ? 'server-side user store' : null)],
+              ['context.anonymous', d.context?.anonymous ? 'true' : null],
+              ['session.key', d.context?.session],
               ['prompt {{user_name}}', d.promptVariables?.user_name],
               ['prompt {{product_tier}}', d.promptVariables?.product_tier, true],
               ['prompt {{signed_in}}', String(!!d.promptVariables?.signed_in)],
@@ -908,6 +939,7 @@
               // already substituted, so the personalization is visible.
               ['system prompt (rendered)', d.systemPrompt, 'prompt-pre'],
               ['classifier config', d.classifier?.configKey],
+              ['classifier variation', fmtVariation(d.classifier)],
               ['classifier model', d.classifier?.model],
               ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
               ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
@@ -922,6 +954,7 @@
             const r = data.debug.retry;
             appendMeta('⚖️ Judge — quality gate before the reply', [
               ['judge config', j.configKey],
+              ['judge variation', fmtVariation(j)],
               ['judge model', j.model],
               ['score', j.score != null ? j.score.toFixed(2) + ' (threshold ' + (j.threshold ?? '?') + ')' : null],
               ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
@@ -929,7 +962,8 @@
               ['judge latency', j.durationMs != null ? j.durationMs + 'ms' : null],
               ['judge error', j.error],
               ['rejected draft', r && r.retried && r.draft ? '"' + r.draft.slice(0, 180) + (r.draft.length > 180 ? '…"' : '"') : null],
-              ['retried with', r && r.retried ? r.model + ' (via LD rule: complexity = complex)' : null],
+              ['retried with', r && r.retried ? r.model + (r.variationKey ? ' · LD served variation ' + fmtVariation(r) : '') + ' (context.complexity forced to complex)' : null],
+              ['retry judged', r && r.judge && r.judge.score != null ? r.judge.score.toFixed(2) + ' → ' + r.judge.verdict : null, r && r.judge && r.judge.verdict === 'fail' ? 'v-fail' : (r && r.judge ? 'v-pass' : null)],
               ['retry error', r && r.error ? r.error : null],
             ]);
           }
@@ -942,9 +976,10 @@
             const final = (r && r.retried) ? r : g;
             appendMeta('🧠 Generation — after the answer', [
               ['LD AI Config', g.configKey],
-              ['routed by', (r && r.retried)
-                ? 'judge retry → targeting rule on context.complexity = complex'
-                : 'targeting rule on context.complexity = ' + (data.debug.context?.complexity || '?')],
+              // The served variation is the honest "LD made this decision"
+              // label — the SDK does not expose which rule matched.
+              ['LD served variation', fmtVariation(final), true],
+              ['context.complexity', (r && r.retried) ? 'complex (forced by judge retry)' : (data.debug.context?.complexity || null)],
               ['provider', final.provider],
               ['model', final.model],
               ['parameters', final.parameters ? JSON.stringify(final.parameters) : null],
@@ -962,6 +997,7 @@
             const rv = data.debug.relevance;
             appendMeta('🛡️ Relevance judge — scope & injection check', [
               ['judge config', rv.configKey],
+              ['judge variation', fmtVariation(rv)],
               ['judge model', rv.model],
               ['score', rv.score != null ? rv.score.toFixed(2) + ' (threshold ' + (rv.threshold ?? '?') + ')' : null],
               ['verdict', rv.verdict, rv.verdict === 'fail' ? 'v-fail' : 'v-pass'],

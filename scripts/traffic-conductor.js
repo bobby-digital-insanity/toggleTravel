@@ -578,6 +578,11 @@ async function main() {
   if (LD_TOKEN) {
     require('./ld-experiment-setup').run((m) => log(`exp-setup: ${m}`))
       .catch((err) => log(`exp-setup error (non-fatal): ${err.message}`));
+    // AI Planner LD setup (metrics for the custom AI events, judge attachments,
+    // routing rules, tool versions, graph variation) — same ensure-create
+    // pattern, same fire-and-forget.
+    require('./ld-ai-planner-setup').run((m) => log(`ai-setup: ${m}`))
+      .catch((err) => log(`ai-setup error (non-fatal): ${err.message}`));
   }
 
   await Promise.all([browserLoop(), apiLoop(), incidentLoop()]);

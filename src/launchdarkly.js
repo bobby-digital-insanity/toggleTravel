@@ -39,6 +39,16 @@ async function getFlag(key, defaultValue, sessionId = 'anonymous') {
   const context = { kind: 'user', key: sessionId };
   return client.variation(key, context, defaultValue);
 }
+
+// Same as getFlag, but evaluated against a FULL context (e.g. the AI Planner's
+// multi-context with name, tier, complexity and session). The key-only
+// getFlag() above drops every attribute, which makes tier-based rules on flags
+// like ai-planner-agent-enabled or ai-planner-judge-threshold impossible.
+async function getFlagFor(key, defaultValue, context) {
+  if (!client) return defaultValue;
+  if (!context) return getFlag(key, defaultValue);
+  return client.variation(key, context, defaultValue);
+}
 // AI Config (completion mode). The `ai-planner` config in LD is a completion
 // config, so we resolve it with completionConfig — model, params, and the
 // prompt messages come back already evaluated for this context.
@@ -136,6 +146,24 @@ function getRawClient() {
   return client;
 }
 
+// Record a judge's score against the ANSWERING config's run, not the judge's.
+// This is the event LD's Monitoring tab reads for `$ld:ai:judge:*` — the same
+// shape the new AI SDK's runJudges() and the old SDK's trackJudgeResult() emit:
+// the evaluation metric key from the judge config, the answer's trackData plus
+// `judgeConfigKey`, and the score as the metric value. Used where no tracker
+// exists (agent mode's graph run), so the compose node's Monitoring shows the
+// score and the graph run is attributed too.
+function trackJudgeScore(metricKey, context, trackData, judgeConfigKey, score) {
+  if (!client || !metricKey || !trackData || typeof score !== 'number') return false;
+  try {
+    client.track(metricKey, context, { ...trackData, judgeConfigKey }, score);
+    return true;
+  } catch (err) {
+    logger.warn('ld_track_judge_failed', { metric: metricKey, error: err.message });
+    return false;
+  }
+}
+
 // Variation metadata for a graph flag (variationKey + version), which the
 // graph-level events need. The new SDK keeps this internal to its own router,
 // so read it off the raw flag value.
@@ -152,6 +180,15 @@ function getClientSideId() {
 function track(eventName, sessionId = 'anonymous', data = undefined, metricValue = undefined) {
   if (!client) return;
   const context = { kind: 'user', key: sessionId };
+  trackFor(eventName, context, data, metricValue);
+}
+
+// Custom event against a FULL context, so LD metrics built on it can be
+// broken down (or experimented on) by the context's attributes — tier, for
+// one. `metricValue` is the number a numeric metric reads; put it here, not in
+// `data`, or the metric charts nothing.
+function trackFor(eventName, context, data = undefined, metricValue = undefined) {
+  if (!client || !context) return;
   try {
     client.track(eventName, context, data, metricValue);
   } catch (err) {
@@ -159,4 +196,4 @@ function track(eventName, sessionId = 'anonymous', data = undefined, metricValue
   }
 }
 
-module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig, getJudgeConfig, getAgent, getAgentConfig, recordFeedback, recordGraphFeedback, getRawClient, getGraphMeta };
+module.exports = { init, getFlag, getFlagFor, getClientSideId, track, trackFor, trackJudgeScore, getCompletionConfig, getJudgeConfig, getAgent, getAgentConfig, recordFeedback, recordGraphFeedback, getRawClient, getGraphMeta };

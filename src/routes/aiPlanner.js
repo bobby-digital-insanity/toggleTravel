@@ -5,10 +5,11 @@ const router = express.Router();
 const { chat: geminiChat } = require('../gemini');
 const { chat: claudeChat } = require('../anthropic');
 const { chat: openaiChat } = require('../openai');
-const { getFlag, getCompletionConfig, getJudgeConfig, track, recordFeedback, recordGraphFeedback } = require('../launchdarkly');
+const { getFlagFor, getCompletionConfig, getJudgeConfig, trackFor, trackJudgeScore, recordFeedback, recordGraphFeedback } = require('../launchdarkly');
 const { runAgentTurn, buildRoster } = require('../agents/supervisor');
 const { GRAPH_KEY, resolveAgentGraph } = require('../aiGraph');
 const { TOOL_REGISTRY } = require('../tools');
+const { buildContext, userOf, withComplexity, asComplexity, buildPromptVariables, describeContext } = require('../ai/context');
 const logger = require('../logger');
 
 // The LaunchDarkly AI Config (completion mode) that drives this planner.
@@ -40,54 +41,20 @@ function sanitizeParameters(model, parameters = {}) {
   return rest;
 }
 
-// Build the LD evaluation context from headers the AI Planner page sends. Key,
-// name, and tier mirror the browser's signed-in identity so server-side
-// evaluations (the model split, tier-based targeting) match the client SDK and
-// can target on tier (e.g. "Diamond users get Claude"). Falls back to the
-// anonymous session id when no user is signed in.
-function buildContext(req) {
-  const context = { kind: 'user', key: req.get('x-user-key') || req.sessionId || 'anonymous' };
-  const name = req.get('x-user-name');
-  const tier = req.get('x-user-tier');
-  if (name) context.name = name;
-  if (tier) context.tier = tier;
-  return context;
-}
+// The LD context (buildContext) and the prompt variables (buildPromptVariables)
+// live in ../ai/context.js so the supervisor and this router share one
+// identity: a multi-context of the person (tier resolved server-side) and the
+// browser session, with `complexity` stamped on the person by the classifier.
 
-// Prompt variables for every AI Config resolution on this route. The LD AI SDK
-// Mustache-renders these into the config's messages (completion/judge configs)
-// or instructions (agent configs), so a prompt authored in LaunchDarkly can say
-//
-//   You are a support agent for {{product_tier}} customers.
-//   Address the user as {{user_name}}.
-//
-// and the personalization is config, not string-building in code. Editing that
-// sentence is a variation change in the LD UI — no deploy.
-//
-// The SDK also injects the raw evaluation context as `ldctx`, so a prompt can
-// reach anything on it directly ({{ldctx.tier}}, {{ldctx.key}}) without the
-// variable having to be listed here.
-function buildPromptVariables(context) {
-  const displayName = String(context.name || '').trim();
-  const rawTier = String(context.tier || 'standard');
-  return {
-    // Display name — falls back to a neutral noun so the prompt never renders
-    // "Address the user as ." for anonymous visitors.
-    user_name: displayName || 'traveler',
-    user_key: context.key,
-    // Title Case for the prompt ("Diamond"); context.tier stays lowercase
-    // because that is what the targeting rules in LD match on.
-    product_tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
-    tier_key: rawTier.toLowerCase(),
-    // Truthy/falsy so prompts can use Mustache sections:
-    // {{#signed_in}}Greet {{user_name}} by name.{{/signed_in}}
-    signed_in: !!displayName,
-    today: new Date().toISOString().slice(0, 10),
-    // Legacy aliases — earlier variations of these prompts referenced
-    // {{name}}/{{tier}}. Kept so an unedited variation keeps rendering.
-    name: displayName || 'traveler',
-    tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
-  };
+// Which variation LaunchDarkly actually served for a resolved config. The old
+// AI SDK does not expose the matched targeting rule, so the served variation
+// key + version is the honest label for "LD made this decision" — the dev view
+// prints it instead of a hardcoded "routed by" string. Empty when LD was
+// unreachable and the local fallback config is in play.
+function servedVariation(tracker) {
+  const data = typeof tracker?.getTrackData === 'function' ? tracker.getTrackData() : null;
+  if (!data) return {};
+  return { variationKey: data.variationKey || null, version: data.version ?? null };
 }
 
 // Fallback used only if LD is unreachable or the config is missing. The model,
@@ -108,10 +75,12 @@ complex = multi-part questions, or anything involving a disruption (cancellation
 simple = everything else (single factual travel questions).
 Respond with exactly one word: simple or complex.`;
 
+// Fallback if LD is unreachable — Haiku 4.5, the same model the live LD config
+// serves, so an LD outage does not silently switch providers.
 const DEFAULT_CLASSIFIER_CONFIG = {
   enabled: true,
   model: {
-    name: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    name: 'claude-haiku-4-5-20251001',
     parameters: { temperature: 0, maxOutputTokens: 1024 },
   },
   messages: [{ role: 'system', content: CLASSIFIER_FALLBACK_PROMPT }],
@@ -134,6 +103,7 @@ async function classifyMessage(message, context) {
     const model = String(src.model?.name || DEFAULT_CLASSIFIER_CONFIG.model.name).replace(/^.*\//, '');
     const params = src.model?.parameters || {};
     const tracker = typeof cfg?.createTracker === 'function' ? cfg.createTracker() : null;
+    const served = servedVariation(tracker);
 
     const chat = pickChat(typeof src.provider === 'string' ? src.provider : src.provider?.name, model);
     const call = () => chat([{ role: 'user', content: message }], {
@@ -166,6 +136,7 @@ async function classifyMessage(message, context) {
       complexity,
       debug: {
         configKey: CLASSIFIER_CONFIG_KEY,
+        ...served,
         model,
         verdict: complexity,
         durationMs: Date.now() - startedAt,
@@ -181,10 +152,12 @@ async function classifyMessage(message, context) {
   }
 }
 
+// Fallback if LD is unreachable — Haiku 4.5, matching the live config's
+// fallthrough, so an LD outage does not silently switch providers.
 const DEFAULT_COMPLETION_CONFIG = {
   enabled: true,
   model: {
-    name: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    name: 'claude-haiku-4-5-20251001',
     parameters: { temperature: 0.7, maxTokens: 2048 },
   },
   messages: [{ role: 'system', content: SYSTEM_PROMPT }],
@@ -203,13 +176,15 @@ Score LOW (below 0.5) if the response states, estimates, or implies specific liv
 Score HIGH (0.8 or above) only if the response uses verified data from the conversation or clearly avoids asserting unverifiable specifics.
 Respond ONLY with raw JSON: {"score": <0.0-1.0>, "reasoning": "<one sentence>"}`;
 
-// Judge fallback runs on OpenAI (an independent, non-Claude judge — avoids the
-// self-preference bias of grading Claude answers with Claude). The real judge
-// model/rubric come from the LD judge config `ai-planner-judge`.
+// The judge's model is LD config (`ai-planner-judge`), chosen for cost: a 0–1
+// score does not need a frontier model, and a judge that costs more than the
+// answer it grades inverts the "cheaper" story. This fallback only applies if
+// LD is unreachable; it uses Haiku 4.5, the same class of model the LD config
+// serves, so an LD outage never silently switches provider.
 const DEFAULT_JUDGE_CONFIG = {
   enabled: true,
   model: {
-    name: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    name: 'claude-haiku-4-5-20251001',
     parameters: { temperature: 0, maxTokens: 1024 },
   },
   messages: [{ role: 'system', content: JUDGE_FALLBACK_RUBRIC }],
@@ -255,7 +230,7 @@ Respond ONLY with raw JSON: {"score": <0.0-1.0>, "reasoning": "<one sentence>"}`
 const DEFAULT_RELEVANCE_CONFIG = {
   enabled: true,
   model: {
-    name: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    name: 'claude-haiku-4-5-20251001',
     parameters: { temperature: 0, maxTokens: 1024 },
   },
   messages: [{ role: 'system', content: RELEVANCE_FALLBACK_RUBRIC }],
@@ -321,6 +296,7 @@ async function runJudgeConfig(configKey, defaultConfig, fallbackRubric, question
     const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(1, parsed.score)) : null;
     return {
       configKey,
+      ...servedVariation(tracker),
       model,
       score,
       reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : null,
@@ -336,6 +312,24 @@ async function runJudgeConfig(configKey, defaultConfig, fallbackRubric, question
 
 async function judgeAnswer(question, answer, context) {
   return runJudgeConfig(JUDGE_CONFIG_KEY, DEFAULT_JUDGE_CONFIG, JUDGE_FALLBACK_RUBRIC, question, answer, context);
+}
+
+// Conversation mode: push a judge's score to LD through the ANSWERING config's
+// tracker, so it is attributed to the variation that wrote the text (the judge
+// call's own duration/tokens were already tracked on the judge config inside
+// runJudgeConfig). `metricKey` is the judge config's evaluationMetricKey
+// (`$ld:ai:judge:accuracy` / `:relevance`); without it LD has nothing to chart.
+function recordJudgeOnTracker(tracker, judge) {
+  if (!tracker?.trackJudgeResult || !judge || judge.score == null || !judge.evaluationMetricKey) return false;
+  tracker.trackJudgeResult({
+    judgeConfigKey: judge.configKey,
+    success: true,
+    sampled: true,
+    metricKey: judge.evaluationMetricKey,
+    score: judge.score,
+    reasoning: judge.reasoning || undefined,
+  });
+  return true;
 }
 
 async function judgeRelevance(question, answer, context) {
@@ -364,8 +358,16 @@ async function resolvePlannerConfig(context, variables = {}) {
 
   const provider = (typeof src.provider === 'string' ? src.provider : src.provider?.name) || '';
 
+  // The completion config exposes a createTracker() factory (NOT a .tracker
+  // property). A fresh tracker per request is required and gives correct
+  // per-variation attribution on LD's Monitoring tab.
+  const tracker = typeof cfg?.createTracker === 'function' ? cfg.createTracker() : null;
+
   return {
     enabled: src.enabled !== false,
+    // The variation LD served (and its version) — the proof that LaunchDarkly,
+    // not this code, picked the model. Printed in the banner and the dev view.
+    ...servedVariation(tracker),
     instructions,
     presetMessages,
     provider,
@@ -379,10 +381,7 @@ async function resolvePlannerConfig(context, variables = {}) {
         ? src.model.parameters
         : { temperature: 0.7, maxOutputTokens: 2048 },
     ),
-    // The completion config exposes a createTracker() factory (NOT a .tracker
-    // property). A fresh tracker per request is required and gives correct
-    // per-variation attribution on LD's Monitoring tab.
-    tracker: typeof cfg?.createTracker === 'function' ? cfg.createTracker() : null,
+    tracker,
   };
 }
 
@@ -390,8 +389,8 @@ async function resolvePlannerConfig(context, variables = {}) {
 // for the model banner on the page. Reflects live LD AI Config changes.
 router.get('/config', async (req, res, next) => {
   try {
-    const { enabled, model, parameters } = await resolvePlannerConfig(buildContext(req));
-    res.json({ configKey: AI_CONFIG_KEY, enabled, model, parameters });
+    const { enabled, model, parameters, variationKey, version } = await resolvePlannerConfig(buildContext(req));
+    res.json({ configKey: AI_CONFIG_KEY, enabled, model, parameters, variationKey: variationKey || null, version: version ?? null });
   } catch (err) {
     logger.warn('ai_planner_config_error', { error: err.message });
     next(err);
@@ -419,6 +418,8 @@ router.get('/agent-config', async (req, res, next) => {
     res.json({
       mode: 'agent',
       configKey: composeNode.key,
+      variationKey: composeNode.meta?.variationKey || null,
+      version: composeNode.meta?.version ?? null,
       graphKey: GRAPH_KEY,
       enabled: true,
       model: composeNode.config?.model?.name || null,
@@ -427,6 +428,7 @@ router.get('/agent-config', async (req, res, next) => {
         name: r.name,
         label: r.label,
         configKey: r.node.key,
+        variationKey: r.node.meta?.variationKey || null,
         model: r.node.config?.model?.name || null,
         enabled: true, // a disabled node disables the whole graph, so reaching here means on
       })),
@@ -452,7 +454,7 @@ router.post('/feedback', (req, res, next) => {
     // resumption token, agent mode sends the graph run's base64url trackData.
     const ok = recordGraphFeedback(token, context, kind === 'down' ? 'down' : 'up')
       || recordFeedback(token, context, kind === 'down' ? 'down' : 'up');
-    logger.info('ai_planner_feedback', { session_id: context.key, kind: kind === 'down' ? 'down' : 'up', recorded: ok });
+    logger.info('ai_planner_feedback', { session_id: describeContext(context).key, kind: kind === 'down' ? 'down' : 'up', recorded: ok });
     res.json({ ok });
   } catch (err) {
     logger.warn('ai_planner_feedback_error', { error: err.message });
@@ -477,16 +479,19 @@ router.post('/agent-chat', async (req, res, next) => {
     }
 
     const context = buildContext(req);
+    const who = describeContext(context);
 
-    const apiEnabled = await getFlag('ai-planner-api', false, context.key);
+    // Both gates evaluate against the full context, so LD can target them by
+    // tier ("agent mode for Platinum and above") — not just by key.
+    const apiEnabled = await getFlagFor('ai-planner-api', false, context);
     if (!apiEnabled) {
-      logger.info('ai_planner_api_disabled', { session_id: context.key, mode: 'agent' });
+      logger.info('ai_planner_api_disabled', { session_id: who.key, mode: 'agent' });
       return res.status(503).json({ error: 'The AI Planner is currently unavailable.' });
     }
 
-    const agentEnabled = await getFlag('ai-planner-agent-enabled', false, context.key);
+    const agentEnabled = await getFlagFor('ai-planner-agent-enabled', false, context);
     if (!agentEnabled) {
-      logger.info('ai_planner_agent_disabled', { session_id: context.key });
+      logger.info('ai_planner_agent_disabled', { session_id: who.key, tier: who.tier });
       return res.status(503).json({ error: 'Agent mode is not available right now.' });
     }
 
@@ -495,7 +500,7 @@ router.post('/agent-chat', async (req, res, next) => {
     // Sonnet 5 for simple requests and Opus 5 for complex ones. The routing
     // decision stays in LaunchDarkly.
     const { complexity, debug: classifierDebug } = await classifyMessage(message, context);
-    context.complexity = complexity;
+    withComplexity(context, complexity);
 
     // Same variables conversation mode uses — every agent config's
     // instructions can reference {{user_name}} / {{product_tier}}.
@@ -515,12 +520,17 @@ router.post('/agent-chat', async (req, res, next) => {
     ]);
     const judges = await Promise.all([accuracyJudge, relevanceJudge].map(async (judge, i) => {
       if (!judge || judge.skipped || judge.score == null) return judge;
-      const threshold = await getFlag(
+      const threshold = await getFlagFor(
         i === 0 ? 'ai-planner-judge-threshold' : 'ai-planner-relevance-threshold',
         0.7,
-        context.key,
+        context,
       );
-      return { ...judge, threshold, verdict: judge.score >= threshold ? 'pass' : 'fail' };
+      // Push the score to LD against the COMPOSE run — the config that wrote
+      // the answer — so `$ld:ai:judge:accuracy` / `:relevance` light up on the
+      // compose node's Monitoring tab and the graph run, exactly as the new
+      // SDK's own runJudges() would attribute them.
+      const recorded = trackJudgeScore(judge.evaluationMetricKey, context, out.trackData, judge.configKey, judge.score);
+      return { ...judge, threshold, verdict: judge.score >= threshold ? 'pass' : 'fail', recorded };
     }));
 
     res.json({
@@ -539,6 +549,9 @@ router.post('/agent-chat', async (req, res, next) => {
           verdict: judge.verdict || null,
           reasoning: judge.reasoning || null,
           durationMs: judge.durationMs ?? null,
+          recorded: judge.recorded ?? null,
+          variationKey: judge.variationKey || null,
+          version: judge.version ?? null,
           error: judge.error || null,
         })),
       },
@@ -565,9 +578,10 @@ router.post('/chat', async (req, res, next) => {
     // off, refuse before spending any Gemini tokens. This is also the
     // prerequisite behind ai-planner-enabled, so the UI is hidden in lockstep.
     const context = buildContext(req);
-    const apiEnabled = await getFlag('ai-planner-api', false, context.key);
+    const who = describeContext(context);
+    const apiEnabled = await getFlagFor('ai-planner-api', false, context);
     if (!apiEnabled) {
-      logger.info('ai_planner_api_disabled', { session_id: context.key });
+      logger.info('ai_planner_api_disabled', { session_id: who.key });
       return res.status(503).json({ error: 'The AI Planner is currently unavailable.' });
     }
 
@@ -584,7 +598,7 @@ router.post('/chat', async (req, res, next) => {
     //    the verdict onto the context. The ai-planner config's targeting rules
     //    in LD route on this attribute — cheap model for simple, strong for complex.
     const { complexity, debug: classifierDebug } = await classifyMessage(message, context);
-    context.complexity = complexity;
+    withComplexity(context, complexity);
 
     // 2. Prompt variables: the LD prompt references {{user_name}},
     //    {{product_tier}} and friends (Mustache), so personalization is config,
@@ -594,7 +608,7 @@ router.post('/chat', async (req, res, next) => {
     // Model, params, provider, instructions, and any preset messages come from
     // the LD AI Config. `let` — a judge-triggered retry swaps these for the
     // strong path's values.
-    let { instructions, presetMessages, provider, model, parameters, tracker } = await resolvePlannerConfig(context, variables);
+    let { instructions, presetMessages, provider, model, parameters, tracker, variationKey, version } = await resolvePlannerConfig(context, variables);
 
     // Preset few-shot turns from the config go before the live conversation.
     const messages = [...presetMessages, ...convo];
@@ -633,6 +647,8 @@ router.post('/chat', async (req, res, next) => {
     let result = await generate({ instructions, presetMessages, provider, model, parameters, tracker });
     const firstGeneration = {
       configKey: AI_CONFIG_KEY,
+      variationKey: variationKey || null,
+      version: version ?? null,
       provider: provider || null,
       model,
       parameters,
@@ -650,26 +666,25 @@ router.post('/chat', async (req, res, next) => {
     let retryDebug = null;
     judgeDebug = await judgeAnswer(message, result.text, context);
     if (!judgeDebug.skipped && !judgeDebug.error && judgeDebug.score != null) {
-      const threshold = await getFlag('ai-planner-judge-threshold', 0.7, context.key);
+      const threshold = await getFlagFor('ai-planner-judge-threshold', 0.7, context);
       judgeDebug.threshold = threshold;
       judgeDebug.verdict = judgeDebug.score >= threshold ? 'pass' : 'fail';
-      tracker?.trackJudgeResult?.({
-        judgeConfigKey: judgeDebug.configKey,
-        success: true,
-        sampled: true,
-        ...(judgeDebug.evaluationMetricKey ? { metricKey: judgeDebug.evaluationMetricKey } : {}),
-        score: judgeDebug.score,
-        reasoning: judgeDebug.reasoning || undefined,
-      });
+      // Recorded on the FIRST generation's tracker: this is the draft's score,
+      // so the cheap variation's Monitoring shows the low mark that caused the
+      // retry, and the strong variation is judged on its own answer below.
+      recordJudgeOnTracker(tracker, judgeDebug);
 
-      if (judgeDebug.verdict === 'fail' && context.complexity === 'simple') {
+      if (judgeDebug.verdict === 'fail' && userOf(context).complexity === 'simple') {
         const draft = result.text;
         try {
-          const retryResolved = await resolvePlannerConfig({ ...context, complexity: 'complex' }, variables);
+          const retryResolved = await resolvePlannerConfig(asComplexity(context, 'complex'), variables);
           const retryResult = await generate(retryResolved);
           retryDebug = {
             retried: true,
             firstModel: model,
+            firstVariationKey: variationKey || null,
+            variationKey: retryResolved.variationKey || null,
+            version: retryResolved.version ?? null,
             model: retryResolved.model,
             provider: retryResolved.provider || null,
             parameters: retryResolved.parameters,
@@ -677,15 +692,27 @@ router.post('/chat', async (req, res, next) => {
             tokens: retryResult.usage || null,
             draft,
           };
-          // Custom LD metric event — "how often does the retry kick in".
-          track('ai-planner-judge-retry', context.key, {
+          // Custom LD metric event — "how often does the retry kick in". Against
+          // the full context so the metric can be broken down by tier.
+          trackFor('ai-planner-judge-retry', context, {
             from_model: model,
             to_model: retryResolved.model,
             judge_score: judgeDebug.score,
           });
           // The retry's values become the response the customer sees.
           result = retryResult;
-          ({ instructions, provider, model, parameters, tracker } = retryResolved);
+          ({ instructions, provider, model, parameters, tracker, variationKey, version } = retryResolved);
+
+          // Judge the retry too, and record that score on the STRONG
+          // variation's run — otherwise its Monitoring tab never sees a judge
+          // score for the answers it actually produced.
+          const retryJudge = await judgeAnswer(message, result.text, context);
+          if (!retryJudge.skipped && !retryJudge.error && retryJudge.score != null) {
+            retryJudge.threshold = judgeDebug.threshold;
+            retryJudge.verdict = retryJudge.score >= judgeDebug.threshold ? 'pass' : 'fail';
+            recordJudgeOnTracker(tracker, retryJudge);
+          }
+          retryDebug.judge = retryJudge;
         } catch (err) {
           logger.warn('ai_planner_retry_failed', { error: err.message });
           retryDebug = { retried: false, error: err.message };
@@ -699,14 +726,18 @@ router.post('/chat', async (req, res, next) => {
     // stronger model the same way an unverifiable-data failure is.
     let relevanceDebug = await judgeRelevance(message, result.text, context);
     if (!relevanceDebug.skipped && !relevanceDebug.error && relevanceDebug.score != null) {
-      const threshold = await getFlag('ai-planner-relevance-threshold', 0.7, context.key);
+      const threshold = await getFlagFor('ai-planner-relevance-threshold', 0.7, context);
       relevanceDebug = { ...relevanceDebug, threshold, verdict: relevanceDebug.score >= threshold ? 'pass' : 'fail' };
+      // `tracker` is the final answer's tracker here (post-retry if one ran),
+      // so `$ld:ai:judge:relevance` lands on the variation that shipped.
+      relevanceDebug.recorded = recordJudgeOnTracker(tracker, relevanceDebug);
     }
 
     logger.info('ai_planner_chat', {
       turns: messages.length,
       model,
-      complexity: context.complexity,
+      tier: who.tier,
+      complexity: userOf(context).complexity,
       judge_verdict: judgeDebug?.verdict || null,
       relevance_verdict: relevanceDebug?.verdict || null,
       retried: !!retryDebug?.retried,
@@ -719,15 +750,10 @@ router.post('/chat', async (req, res, next) => {
     // debug feeds the page's developer view (hidden unless dev mode is on).
     res.json({
       reply: result.text,
-      meta: { configKey: AI_CONFIG_KEY, model, parameters, complexity: context.complexity },
+      meta: { configKey: AI_CONFIG_KEY, variationKey: variationKey || null, version: version ?? null, model, parameters, complexity: userOf(context).complexity },
       feedbackToken: tracker?.resumptionToken || null,
       debug: {
-        context: {
-          key: context.key,
-          name: context.name || null,
-          tier: context.tier || null,
-          complexity: context.complexity,
-        },
+        context: describeContext(context),
         promptVariables: variables,
         // The system prompt exactly as sent — variables already substituted, so
         // the dev view shows the personalization rather than the template.

@@ -69,6 +69,22 @@ window.LDFlags = (function () {
     return key;
   }
 
+  // The LD context this browser evaluates with: a multi-context of the person
+  // and the browser session, mirroring what the server builds for the AI
+  // Planner (src/ai/context.js) so a flag can target either kind. A visitor
+  // with no identity is marked anonymous — LD keeps anonymous contexts out of
+  // the Contexts list and does not index their attributes. Signed-in users and
+  // load-gen personas (a real email as the key) are not anonymous.
+  function buildContext(user) {
+    const sessionKey = getSessionKey();
+    const anonymous = !user.key || user.key === sessionKey || /^anon-/i.test(user.key);
+    return {
+      kind: 'multi',
+      user: { ...user, ...(anonymous ? { anonymous: true } : {}) },
+      session: { key: sessionKey, anonymous: true },
+    };
+  }
+
   // ── Plan session property ───────────────────────────────────────────────
   // Every recorded session gets a `plan` property (searchable in Session Replay).
   // Precedence: signed-in nav tier → load-gen persona plan (tt-user-plan) →
@@ -134,13 +150,12 @@ window.LDFlags = (function () {
       const tierEmail    = localStorage.getItem('tt-user-email');
       const tierName     = localStorage.getItem('tt-user-name');
       const key          = tierEmail || personaEmail || getSessionKey();
-      const context      = {
-        kind: 'user',
+      const context      = buildContext({
         key,
         name: tierName || personaEmail || runId || undefined,
         ...(runId ? { loadRunId: runId } : {}),
         ...(tier ? { tier } : {}),
-      };
+      });
       console.log('[LD] Initializing with client-side ID:', ldClientSideId.slice(0, 8) + '...');
 
       const plugins = [];
@@ -259,7 +274,7 @@ window.LDFlags = (function () {
     if (!ldClient) return;
     try {
       const runId = localStorage.getItem('tt-run-id');
-      const ctx = { kind: 'user', key: email, name: email, ...(runId ? { loadRunId: runId } : {}), ...extras };
+      const ctx = buildContext({ key: email, name: email, ...(runId ? { loadRunId: runId } : {}), ...extras });
       await ldClient.identify(ctx);
       console.log('[LD] Identified user:', email, extras);
       setPlanSessionProperty(); // tier may have just changed (nav user switch)
