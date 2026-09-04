@@ -706,6 +706,25 @@
           ['classifier error', d.classifier?.error],
         ]);
 
+        // The team itself is LD config now: root, edges and each edge's handoff
+        // JSON come from the agent graph, so this block shows the topology the
+        // turn actually ran on — change it in LD and this changes with no deploy.
+        const g = d.graph || {};
+        appendMeta('🕸 Agent graph — topology from LaunchDarkly', [
+          ['LD agent graph', g.key],
+          ['root (supervisor)', g.root, true],
+          ['nodes', g.nodes],
+          ['graph run id', g.runId],
+          ...(g.edges || []).map((e) => [
+            '↳ ' + e.target,
+            [
+              (e.handoff && e.handoff.label) || 'no handoff label',
+              (e.handoff && e.handoff.timeoutMs ? e.handoff.timeoutMs + 'ms' : 'default timeout'),
+              (e.handoff && e.handoff.reportFormat ? '"' + String(e.handoff.reportFormat).slice(0, 70) + '…"' : null),
+            ].filter(Boolean).join(' · '),
+          ]),
+        ]);
+
         const p = d.plan || {};
         appendMeta('🧭 Supervisor — PLAN phase', [
           ['LD AI Config', p.configKey],
@@ -713,6 +732,7 @@
           ['routed by', 'targeting rule on context.complexity = ' + (d.context?.complexity || '?')],
           ['constraints', p.constraints ? JSON.stringify(p.constraints) : null],
           ['specialists chosen', (p.specialists || []).join(', ') || 'none'],
+          ['chosen from', (d.graph?.edges || []).length ? (d.graph.edges.length + ' available on the graph') : null],
           ['reasoning', p.reasoning],
           ['plan parsed', p.parsed === false ? 'no — consulted every specialist' : null, p.parsed === false ? 'v-fail' : null],
           ['latency', p.durationMs != null ? p.durationMs + 'ms' : null],

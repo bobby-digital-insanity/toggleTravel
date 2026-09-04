@@ -26,6 +26,9 @@ async function init() {
   try {
     await client.waitForInitialization({ timeout: 5 });
     logger.info('ld_initialized', { message: 'LaunchDarkly server SDK ready' });
+    // Hand the same client to the new AI SDK (AgentControl), which drives agent
+    // mode's graph. Sharing the client keeps this process on one flag stream.
+    await require('./aiGraph').initGraphSdk(client);
   } catch (err) {
     logger.warn('ld_init_timeout', { message: 'LaunchDarkly failed to initialize — using flag defaults', error: err.message });
   }
@@ -108,6 +111,40 @@ function recordFeedback(resumptionToken, context, kind = 'up') {
   }
 }
 
+// Deferred feedback for an agent-mode (graph) run. The new AI SDK has no
+// resumption token: the compose call's trackData IS the run identity, so the
+// browser sends it back base64url-encoded and we re-emit the same feedback
+// event the old SDK's tracker would have. Works across PM2 workers for the same
+// reason the old token did — nothing is held in memory between requests.
+function recordGraphFeedback(token, context, kind = 'up') {
+  if (!client || !token) return false;
+  try {
+    const trackData = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
+    if (!trackData?.runId || !trackData?.configKey) return false;
+    const event = kind === 'down' ? '$ld:ai:feedback:user:negative' : '$ld:ai:feedback:user:positive';
+    client.track(event, context, trackData, 1);
+    return true;
+  } catch (err) {
+    logger.warn('ai_planner_graph_feedback_failed', { error: err.message });
+    return false;
+  }
+}
+
+// Raw client, for the paths that talk to LaunchDarkly directly: the new AI
+// SDK's initClient(), and the graph-level $ld:ai:graph:* events in aiGraph.js.
+function getRawClient() {
+  return client;
+}
+
+// Variation metadata for a graph flag (variationKey + version), which the
+// graph-level events need. The new SDK keeps this internal to its own router,
+// so read it off the raw flag value.
+async function getGraphMeta(key, context) {
+  if (!client) return {};
+  const value = await client.variation(key, context, {});
+  return value?._ldMeta || {};
+}
+
 function getClientSideId() {
   return process.env.LD_CLIENT_SIDE_ID || null;
 }
@@ -122,4 +159,4 @@ function track(eventName, sessionId = 'anonymous', data = undefined, metricValue
   }
 }
 
-module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig, getJudgeConfig, getAgent, getAgentConfig, recordFeedback };
+module.exports = { init, getFlag, getClientSideId, track, getCompletionConfig, getJudgeConfig, getAgent, getAgentConfig, recordFeedback, recordGraphFeedback, getRawClient, getGraphMeta };

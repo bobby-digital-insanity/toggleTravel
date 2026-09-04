@@ -2,68 +2,47 @@
 
 /**
  * Agent mode for the AI Planner — the multi-agent path behind the page's
- * "Agent" toggle.
+ * "Agent" toggle, driven by a LaunchDarkly **agent graph**.
  *
  * Shape of a turn:
  *   1. Supervisor, PLAN phase   — decompose the request, choose specialists
- *   2. Specialists, in parallel — each runs its own LD agent config + tools
+ *   2. Specialists, in parallel — one graph node each, with its own LD tools
  *   3. Supervisor, COMPOSE phase — write the single customer-facing answer
  *
- * Every model choice lives in LaunchDarkly, not here. The supervisor config
- * (`ai-planner-agent`) carries a targeting rule on the `complexity` context
- * attribute — Sonnet 5 for simple, Opus 5 for complex — so this file never
- * picks a model. Which specialists run is the supervisor's call, not the code's.
+ * Nothing about the team lives in this file any more. The LD agent graph
+ * (`ai-planner-graph`) owns the roster and the wiring: its root is the
+ * supervisor, its edges are the specialists, and each edge's handoff JSON
+ * carries that specialist's label, timeout and reporting format. Adding a fifth
+ * specialist is a graph edit in LaunchDarkly — no deploy. Model choice stays in
+ * each node's AI Config, and which specialists actually run on a given turn
+ * stays the supervisor's decision.
+ *
+ * This path runs on the new AI SDK (see `src/aiGraph.js`); conversation mode
+ * still uses the older `@launchdarkly/server-sdk-ai`.
  */
 
-const { getAgent, track } = require('../launchdarkly');
+const { getRawClient, getGraphMeta, track } = require('../launchdarkly');
+const { GRAPH_KEY, resolveAgentGraph, instrumentTools, createGraphRun } = require('../aiGraph');
 const { TOOL_REGISTRY } = require('../tools');
 const logger = require('../logger');
 
-const SUPERVISOR_KEY = 'ai-planner-agent';
-
-const SPECIALISTS = {
-  weather: { key: 'ai-planner-agent-weather', label: 'Weather' },
-  location: { key: 'ai-planner-agent-location', label: 'Location' },
-  budget: { key: 'ai-planner-agent-budget', label: 'Budget' },
-  timing: { key: 'ai-planner-agent-timing', label: 'Trip Timing' },
-};
-
-// A disabled default is the right fallback for agent mode. Supplying real
-// instructions here would fork the prompt between LD and code — the thing this
-// demo exists to avoid — so if LD is unreachable the route reports that plainly
-// instead of quietly answering from a hardcoded prompt.
-const DISABLED_DEFAULT = { enabled: false };
-
+// Fallback only — a specialist whose edge carries no timeoutMs.
 const SPECIALIST_TIMEOUT_MS = Number(process.env.AGENT_SPECIALIST_TIMEOUT_MS || 60000);
-
-// The installed LangChain provider extracts reply text only when the model
-// returns a plain string (extractLastMessageContent bails to "" otherwise).
-// Claude Opus 5 has thinking on by default and returns content as an array of
-// blocks — [{type:'thinking'}, {type:'text'}] — so ManagedResult.content comes
-// back empty even though the answer is present. Recover it from the raw
-// LangChain messages. Without this, every Opus 5 turn returns an empty reply.
-function extractText(result) {
-  if (result?.content && String(result.content).trim()) return result.content;
-
-  const raw = result?.raw;
-  const messages = Array.isArray(raw?.messages) ? raw.messages : (Array.isArray(raw) ? raw : []);
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const content = messages[i]?.content;
-    if (typeof content === 'string' && content.trim()) return content;
-    if (Array.isArray(content)) {
-      const text = content
-        .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-        .map((b) => b.text)
-        .join('')
-        .trim();
-      if (text) return text;
-    }
-  }
-  return '';
-}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Human label for a node when its edge has no handoff.label: turn
+// "ai-planner-agent-trip-timing" into "Trip Timing".
+function labelFor(nodeKey, handoff) {
+  if (typeof handoff?.label === 'string' && handoff.label.trim()) return handoff.label;
+  return nodeKey
+    .replace(/^ai-planner-agent-?/, '')
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ') || nodeKey;
 }
 
 function withTimeout(promise, ms, label) {
@@ -91,33 +70,43 @@ function parsePlan(text) {
   return null;
 }
 
-function buildPlanPrompt(message, variables) {
+// The roster the supervisor is allowed to choose from, built from the graph's
+// own edges so the PLAN prompt can never offer a specialist that LD removed.
+function buildPlanPrompt(message, variables, roster) {
   return [
     'PHASE "PLAN"',
     `Today's date is ${today()}.`,
-    `The traveler is ${variables.name} (${variables.tier} tier).`,
+    `The traveler is ${variables.user_name} (${variables.product_tier} tier).`,
+    '',
+    'Specialists available on this turn (use these exact names):',
+    ...roster.map((r) => `- ${r.name} — ${r.label}${r.purpose ? `: ${r.purpose}` : ''}`),
     '',
     'Customer request:',
     message,
   ].join('\n');
 }
 
-function buildSpecialistPrompt(message, plan, variables) {
+function buildSpecialistPrompt(message, plan, variables, handoff) {
   const constraints = plan?.constraints ? JSON.stringify(plan.constraints) : 'not extracted';
+  const wanted = Array.isArray(handoff?.pass) && handoff.pass.length
+    ? `Constraints this specialist owns: ${handoff.pass.join(', ')}`
+    : null;
   return [
     `Today's date is ${today()}.`,
-    `The traveler is ${variables.name} (${variables.tier} tier).`,
+    `The traveler is ${variables.user_name} (${variables.product_tier} tier).`,
     '',
     'Customer request:',
     message,
     '',
     `Constraints extracted by the supervisor: ${constraints}`,
+    ...(wanted ? [wanted] : []),
     '',
-    'Do your specialist analysis and report back in your required format.',
-  ].join('\n');
+    // Reporting format comes from the graph edge in LD, not from this file.
+    handoff?.reportFormat || 'Do your specialist analysis and report back in your required format.',
+  ].filter((line) => line !== null).join('\n');
 }
 
-function buildComposePrompt(message, plan, findings, variables) {
+function buildComposePrompt(message, findings, variables) {
   const reports = findings.map((f) => (
     f.error
       ? `--- ${f.label} specialist: UNAVAILABLE (${f.error}). Do not invent its findings.`
@@ -127,7 +116,7 @@ function buildComposePrompt(message, plan, findings, variables) {
   return [
     'PHASE "COMPOSE"',
     `Today's date is ${today()}.`,
-    `The traveler is ${variables.name} (${variables.tier} tier).`,
+    `The traveler is ${variables.user_name} (${variables.product_tier} tier).`,
     '',
     'Customer request:',
     message,
@@ -139,32 +128,72 @@ function buildComposePrompt(message, plan, findings, variables) {
   ].join('\n');
 }
 
-// Run one specialist end to end. Never throws: a specialist that fails becomes
-// a finding the supervisor is told to acknowledge rather than paper over.
-async function runSpecialist(name, message, plan, context, variables) {
-  const spec = SPECIALISTS[name];
+function usageOf(result) {
+  const u = result?.usage;
+  if (!u) return null;
+  return { input: u.input ?? 0, output: u.output ?? 0, total: u.total ?? 0 };
+}
+
+// Run one specialist node end to end. Never throws: a specialist that fails
+// becomes a finding the supervisor is told to acknowledge rather than paper
+// over. `from` makes runNode emit the graph handoff event for this edge.
+async function runSpecialist(def, root, entry, message, plan, variables) {
   const started = Date.now();
+  const toolCalls = [];
+  const timeoutMs = Number(entry.handoff?.timeoutMs) || SPECIALIST_TIMEOUT_MS;
   try {
-    const agent = await getAgent(spec.key, DISABLED_DEFAULT, context, variables, TOOL_REGISTRY);
-    if (!agent) {
-      return { name, label: spec.label, configKey: spec.key, error: 'agent config disabled or unavailable', durationMs: Date.now() - started };
-    }
-    const result = await withTimeout(agent.run(buildSpecialistPrompt(message, plan, variables)), SPECIALIST_TIMEOUT_MS, spec.label);
-    const cfg = agent.getConfig?.() || {};
+    const result = await withTimeout(
+      def.runNode(entry.node, buildSpecialistPrompt(message, plan, variables, entry.handoff), {
+        variables,
+        toolHandlers: instrumentTools(TOOL_REGISTRY, toolCalls),
+        from: root,
+      }),
+      timeoutMs,
+      entry.label,
+    );
     return {
-      name,
-      label: spec.label,
-      configKey: spec.key,
-      model: cfg.model?.name || null,
-      content: extractText(result),
-      toolCalls: result.metrics?.toolCalls || [],
-      tokens: result.metrics?.tokens || null,
-      durationMs: result.metrics?.durationMs ?? Date.now() - started,
+      name: entry.name,
+      label: entry.label,
+      configKey: entry.node.key,
+      model: entry.node.config?.model?.name || null,
+      content: result.response || '',
+      toolCalls,
+      tokens: usageOf(result),
+      durationMs: Date.now() - started,
     };
   } catch (err) {
-    logger.warn('ai_agent_specialist_failed', { specialist: name, config_key: spec.key, error: err.message });
-    return { name, label: spec.label, configKey: spec.key, error: err.message, durationMs: Date.now() - started };
+    logger.warn('ai_agent_specialist_failed', { specialist: entry.name, config_key: entry.node.key, error: err.message });
+    return {
+      name: entry.name,
+      label: entry.label,
+      configKey: entry.node.key,
+      model: entry.node.config?.model?.name || null,
+      toolCalls,
+      error: err.message,
+      durationMs: Date.now() - started,
+    };
   }
+}
+
+/**
+ * The graph's specialist roster: one entry per outgoing edge of the root, with
+ * the handoff JSON LD attached to that edge. `name` is the short handle the
+ * supervisor uses in its PLAN JSON.
+ */
+function buildRoster(def, root) {
+  return def.edgesFrom(root.key).map((edge) => {
+    const node = def.getNode(edge.targetKey);
+    const handoff = edge.handoff || {};
+    const label = labelFor(edge.targetKey, handoff);
+    return {
+      name: edge.targetKey.replace(/^ai-planner-agent-/, ''),
+      label,
+      purpose: typeof handoff.purpose === 'string' ? handoff.purpose : (node?.config?.instructions ? null : null),
+      edgeKey: edge.key,
+      handoff,
+      node,
+    };
+  }).filter((entry) => entry.node);
 }
 
 /**
@@ -174,113 +203,137 @@ async function runSpecialist(name, message, plan, context, variables) {
 async function runAgentTurn({ message, context, variables }) {
   const startedAt = Date.now();
 
-  // ── 1. PLAN ───────────────────────────────────────────────────────────────
-  const planner = await getAgent(SUPERVISOR_KEY, DISABLED_DEFAULT, context, variables, TOOL_REGISTRY);
-  if (!planner) {
+  const def = await resolveAgentGraph(context, variables, TOOL_REGISTRY);
+  if (!def || !def.root) {
     const err = new Error('Agent mode is not available right now.');
     err.status = 503;
     throw err;
   }
 
-  const planCfg = planner.getConfig?.() || {};
-  const planRun = await planner.run(buildPlanPrompt(message, variables));
-  const planText = extractText(planRun);
-  const plan = parsePlan(planText);
+  const root = def.root;
+  const roster = buildRoster(def, root);
+  const graphMeta = await getGraphMeta(GRAPH_KEY, context);
+  const run = createGraphRun(getRawClient(), context, graphMeta);
 
-  // An unparseable plan means we do not know what the request needs. Consult
-  // everyone rather than guess — the cost is visible in the dev view.
-  const requested = Array.isArray(plan?.specialists) ? plan.specialists : null;
-  const chosen = (requested || Object.keys(SPECIALISTS)).filter((s) => SPECIALISTS[s]);
-  const planDebug = {
-    configKey: SUPERVISOR_KEY,
-    phase: 'plan',
-    model: planCfg.model?.name || null,
-    constraints: plan?.constraints || null,
-    specialists: chosen,
-    reasoning: plan?.reasoning || null,
-    parsed: !!plan,
-    fellBackToAll: !requested,
-    tokens: planRun.metrics?.tokens || null,
-    durationMs: planRun.metrics?.durationMs ?? null,
-  };
+  try {
+    // ── 1. PLAN ─────────────────────────────────────────────────────────────
+    const planToolCalls = [];
+    const planRun = await def.runNode(root, buildPlanPrompt(message, variables, roster), {
+      variables,
+      toolHandlers: instrumentTools(TOOL_REGISTRY, planToolCalls),
+    });
+    const plan = parsePlan(planRun.response);
 
-  // ── 2. SPECIALISTS (parallel) ─────────────────────────────────────────────
-  const findings = await Promise.all(chosen.map((name) => runSpecialist(name, message, plan, context, variables)));
+    // An unparseable plan means we do not know what the request needs. Consult
+    // everyone on the graph rather than guess — the cost shows in the dev view.
+    const requested = Array.isArray(plan?.specialists) ? plan.specialists : null;
+    const chosen = (requested
+      ? roster.filter((r) => requested.some((s) => String(s).toLowerCase().includes(r.name)))
+      : roster);
 
-  // ── 3. COMPOSE ────────────────────────────────────────────────────────────
-  // A fresh agent instance gives a fresh tracker, so LD attributes the compose
-  // call separately from the plan call on the same config.
-  const composer = await getAgent(SUPERVISOR_KEY, DISABLED_DEFAULT, context, variables, TOOL_REGISTRY);
-  if (!composer) {
-    const err = new Error('Agent mode is not available right now.');
-    err.status = 503;
-    throw err;
-  }
-  const composeCfg = composer.getConfig?.() || {};
-  const composeRun = await composer.run(buildComposePrompt(message, plan, findings, variables));
+    const planDebug = {
+      configKey: root.key,
+      phase: 'plan',
+      model: root.config?.model?.name || null,
+      constraints: plan?.constraints || null,
+      specialists: chosen.map((r) => r.name),
+      reasoning: plan?.reasoning || null,
+      parsed: !!plan,
+      fellBackToAll: !requested,
+      tokens: usageOf(planRun),
+      durationMs: Date.now() - startedAt,
+    };
 
-  // NOTE: judges are deliberately NOT attached to the supervisor config via LD's
-  // judgeConfiguration. ManagedAgent.run() feeds the judge `result.content`,
-  // which is the empty string whenever the model returns array content — and
-  // Claude Opus 5 always does, because thinking is on by default. An attached
-  // judge therefore scores a blank answer and writes a meaningless score to the
-  // config's Monitoring tab. The route judges the extracted reply instead.
+    // ── 2. SPECIALISTS (parallel) ───────────────────────────────────────────
+    const findings = await Promise.all(chosen.map((entry) => runSpecialist(def, root, entry, message, plan, variables)));
 
-  const toolCallCount = findings.reduce((n, f) => n + (f.toolCalls?.length || 0), 0);
+    // ── 3. COMPOSE ──────────────────────────────────────────────────────────
+    const composeStarted = Date.now();
+    const composeRun = await def.runNode(root, buildComposePrompt(message, findings, variables), { variables });
 
-  // Custom LD metric event — how much machinery a turn actually used.
-  track('ai-planner-agent-turn', context.key, {
-    specialists: chosen.join(','),
-    specialist_count: chosen.length,
-    tool_calls: toolCallCount,
-    supervisor_model: composeCfg.model?.name || null,
-    complexity: context.complexity || null,
-  });
+    const toolCallCount = findings.reduce((n, f) => n + (f.toolCalls?.length || 0), 0);
+    const totalTokens = [planRun, composeRun].reduce((n, r) => n + (r.usage?.total || 0), 0)
+      + findings.reduce((n, f) => n + (f.tokens?.total || 0), 0);
 
-  logger.info('ai_planner_agent_turn', {
-    specialists: chosen,
-    specialist_count: chosen.length,
-    tool_calls: toolCallCount,
-    supervisor_model: composeCfg.model?.name || null,
-    complexity: context.complexity || null,
-    failed_specialists: findings.filter((f) => f.error).map((f) => f.name),
-    duration_ms: Date.now() - startedAt,
-  });
+    // Graph-level metrics for the whole workflow. Node-level duration, tokens,
+    // tool calls and per-edge handoffs are already tracked by runNode().
+    run.path([root.key, ...findings.map((f) => f.configKey), root.key]);
+    run.duration(Date.now() - startedAt);
+    run.tokens(totalTokens);
+    run.success();
 
-  return {
-    reply: extractText(composeRun),
-    meta: {
-      mode: 'agent',
-      configKey: SUPERVISOR_KEY,
-      model: composeCfg.model?.name || null,
-      parameters: composeCfg.model?.parameters || {},
+    // Custom LD metric event — how much machinery a turn actually used.
+    track('ai-planner-agent-turn', context.key, {
+      graph_key: GRAPH_KEY,
+      specialists: chosen.map((r) => r.name).join(','),
+      specialist_count: chosen.length,
+      tool_calls: toolCallCount,
+      supervisor_model: root.config?.model?.name || null,
       complexity: context.complexity || null,
-      specialists: chosen,
-      toolCalls: toolCallCount,
-    },
-    feedbackToken: composeRun.metrics?.resumptionToken || null,
-    debug: {
-      mode: 'agent',
-      context: { key: context.key, name: context.name || null, tier: context.tier || null, complexity: context.complexity || null },
-      promptVariables: variables,
-      plan: planDebug,
-      specialists: findings.map((f) => ({
-        name: f.name, label: f.label, configKey: f.configKey, model: f.model || null,
-        toolCalls: f.toolCalls || [], tokens: f.tokens || null,
-        durationMs: f.durationMs, error: f.error || null,
-        content: f.content || null,
-      })),
-      compose: {
-        configKey: SUPERVISOR_KEY,
-        phase: 'compose',
-        model: composeCfg.model?.name || null,
-        tokens: composeRun.metrics?.tokens || null,
-        durationMs: composeRun.metrics?.durationMs ?? null,
-      },
+    });
 
-      totalDurationMs: Date.now() - startedAt,
-    },
-  };
+    logger.info('ai_planner_agent_turn', {
+      graph_key: GRAPH_KEY,
+      specialists: chosen.map((r) => r.name),
+      specialist_count: chosen.length,
+      tool_calls: toolCallCount,
+      supervisor_model: root.config?.model?.name || null,
+      complexity: context.complexity || null,
+      failed_specialists: findings.filter((f) => f.error).map((f) => f.name),
+      total_tokens: totalTokens,
+      duration_ms: Date.now() - startedAt,
+    });
+
+    return {
+      reply: composeRun.response || '',
+      meta: {
+        mode: 'agent',
+        configKey: root.key,
+        graphKey: GRAPH_KEY,
+        model: root.config?.model?.name || null,
+        parameters: root.config?.model?.parameters || {},
+        complexity: context.complexity || null,
+        specialists: chosen.map((r) => r.name),
+        toolCalls: toolCallCount,
+      },
+      // The new SDK has no resumption token; the compose call's trackData is
+      // what attributes deferred feedback to this run, so hand that back.
+      feedbackToken: Buffer.from(JSON.stringify(composeRun.trackData || {})).toString('base64url'),
+      debug: {
+        mode: 'agent',
+        context: { key: context.key, name: context.name || null, tier: context.tier || null, complexity: context.complexity || null },
+        promptVariables: variables,
+        graph: {
+          key: GRAPH_KEY,
+          root: root.key,
+          variationKey: graphMeta.variationKey || null,
+          version: graphMeta.version || null,
+          runId: run.trackData.runId,
+          nodes: roster.length + 1,
+          edges: roster.map((r) => ({ key: r.edgeKey, target: r.node.key, handoff: r.handoff })),
+        },
+        plan: planDebug,
+        specialists: findings.map((f) => ({
+          name: f.name, label: f.label, configKey: f.configKey, model: f.model || null,
+          toolCalls: f.toolCalls || [], tokens: f.tokens || null,
+          durationMs: f.durationMs, error: f.error || null,
+          content: f.content || null,
+        })),
+        compose: {
+          configKey: root.key,
+          phase: 'compose',
+          model: root.config?.model?.name || null,
+          tokens: usageOf(composeRun),
+          durationMs: Date.now() - composeStarted,
+        },
+        totalDurationMs: Date.now() - startedAt,
+      },
+    };
+  } catch (err) {
+    run.duration(Date.now() - startedAt);
+    run.failure();
+    throw err;
+  }
 }
 
-module.exports = { runAgentTurn, SPECIALISTS };
+module.exports = { runAgentTurn, buildRoster };

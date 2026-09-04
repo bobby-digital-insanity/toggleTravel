@@ -5,8 +5,10 @@ const router = express.Router();
 const { chat: geminiChat } = require('../gemini');
 const { chat: claudeChat } = require('../anthropic');
 const { chat: openaiChat } = require('../openai');
-const { getFlag, getCompletionConfig, getJudgeConfig, getAgentConfig, track, recordFeedback } = require('../launchdarkly');
-const { runAgentTurn, SPECIALISTS } = require('../agents/supervisor');
+const { getFlag, getCompletionConfig, getJudgeConfig, track, recordFeedback, recordGraphFeedback } = require('../launchdarkly');
+const { runAgentTurn, buildRoster } = require('../agents/supervisor');
+const { GRAPH_KEY, resolveAgentGraph } = require('../aiGraph');
+const { TOOL_REGISTRY } = require('../tools');
 const logger = require('../logger');
 
 // The LaunchDarkly AI Config (completion mode) that drives this planner.
@@ -348,28 +350,33 @@ router.get('/config', async (req, res, next) => {
   }
 });
 
-// GET /api/ai-planner/agent-config — the supervisor + specialist models
-// currently in effect, for the banner while the page is in Agent mode.
-// Resolved without a `complexity` attribute, so this reports the fallthrough
-// (simple-path) variation; a complex request routes to the strong model via the
-// same LD rule at request time.
+// GET /api/ai-planner/agent-config — the graph currently in effect, for the
+// banner while the page is in Agent mode: the root (supervisor) plus every
+// specialist LD has wired to it. Resolved without a `complexity` attribute, so
+// this reports the fallthrough (simple-path) variation; a complex request
+// routes to the strong model via the same LD rule at request time.
 router.get('/agent-config', async (req, res, next) => {
   try {
     const context = buildContext(req);
-    const supervisor = await getAgentConfig('ai-planner-agent', { enabled: false }, context);
-    const specialists = await Promise.all(
-      Object.entries(SPECIALISTS).map(async ([name, spec]) => {
-        const cfg = await getAgentConfig(spec.key, { enabled: false }, context);
-        return { name, label: spec.label, configKey: spec.key, model: cfg?.model?.name || null, enabled: !!cfg?.enabled };
-      }),
-    );
+    const def = await resolveAgentGraph(context, buildPromptVariables(context), TOOL_REGISTRY);
+    if (!def || !def.root) {
+      return res.json({ mode: 'agent', configKey: GRAPH_KEY, graphKey: GRAPH_KEY, enabled: false, model: null, parameters: {}, specialists: [] });
+    }
+    const roster = buildRoster(def, def.root);
     res.json({
       mode: 'agent',
-      configKey: 'ai-planner-agent',
-      enabled: !!supervisor?.enabled,
-      model: supervisor?.model?.name || null,
-      parameters: supervisor?.model?.parameters || {},
-      specialists,
+      configKey: def.root.key,
+      graphKey: GRAPH_KEY,
+      enabled: true,
+      model: def.root.config?.model?.name || null,
+      parameters: def.root.config?.model?.parameters || {},
+      specialists: roster.map((r) => ({
+        name: r.name,
+        label: r.label,
+        configKey: r.node.key,
+        model: r.node.config?.model?.name || null,
+        enabled: true, // a disabled node disables the whole graph, so reaching here means on
+      })),
     });
   } catch (err) {
     logger.warn('ai_planner_agent_config_error', { error: err.message });
@@ -388,7 +395,10 @@ router.post('/feedback', (req, res, next) => {
       throw err;
     }
     const context = buildContext(req);
-    const ok = recordFeedback(token, context, kind === 'down' ? 'down' : 'up');
+    // Two token shapes reach here: conversation mode sends the old SDK's
+    // resumption token, agent mode sends the graph run's base64url trackData.
+    const ok = recordGraphFeedback(token, context, kind === 'down' ? 'down' : 'up')
+      || recordFeedback(token, context, kind === 'down' ? 'down' : 'up');
     logger.info('ai_planner_feedback', { session_id: context.key, kind: kind === 'down' ? 'down' : 'up', recorded: ok });
     res.json({ ok });
   } catch (err) {
