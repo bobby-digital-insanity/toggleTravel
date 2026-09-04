@@ -69,21 +69,23 @@ async function geocode(location) {
   return null;
 }
 
-/**
- * Tool implementation. Returns a plain object; the agent runner stringifies it.
- * Errors are returned as data rather than thrown — a tool that throws ends the
- * agent's turn, while an error it can read lets it report the gap honestly.
- */
-async function getWeatherForecast({ location, lat, lon, days } = {}) {
+// Most locations a specialist asks about in one call. Open-Meteo is fast and
+// key-less, and the catalog has 13 destinations, so this only guards against a
+// runaway list.
+const MAX_BATCH = 16;
+
+// One location → one forecast object. Never throws.
+async function forecastOne({ location, lat, lon }, span) {
   const started = Date.now();
-  const span = Math.min(Math.max(Number(days) || 7, 1), 16);
 
   if (isFictionalPlace(location)) {
-    return { error: `"${location}" is not a real place, so there is no weather forecast for it. Do not recommend it on weather grounds.` };
+    return { location, error: `"${location}" is not a real place, so there is no weather forecast for it. Do not recommend it on weather grounds.` };
   }
 
   try {
-    let coords = Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+    let coords = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) && lat !== null && lon !== null
+      ? { lat: Number(lat), lon: Number(lon) }
+      : null;
     let resolvedName = location || null;
 
     if (!coords) {
@@ -91,7 +93,7 @@ async function getWeatherForecast({ location, lat, lon, days } = {}) {
       const geo = await geocode(location);
       if (!geo) {
         // Atlantis lands here by design: no real place, so no forecast.
-        return { error: `No such place found: "${location}". It may not be a real location, so no forecast exists for it.` };
+        return { location, error: `No such place found: "${location}". It may not be a real location, so no forecast exists for it.` };
       }
       coords = { lat: geo.lat, lon: geo.lon };
       resolvedName = geo.resolvedName;
@@ -121,11 +123,47 @@ async function getWeatherForecast({ location, lat, lon, days } = {}) {
       location: resolvedName, days: forecast.length, duration_ms: Date.now() - started,
     });
 
-    return { location: resolvedName, latitude: coords.lat, longitude: coords.lon, units: { temperature: 'F', wind: 'mph', precipitation: 'mm' }, forecast };
+    return { location: resolvedName, latitude: coords.lat, longitude: coords.lon, forecast };
   } catch (err) {
     logger.warn('tool_weather_forecast_failed', { location, error: err.message });
-    return { error: `Weather lookup failed: ${err.message}` };
+    return { location, error: `Weather lookup failed: ${err.message}` };
   }
+}
+
+/**
+ * Tool implementation. Returns a plain object; the agent runner stringifies it.
+ * Errors are returned as data rather than thrown — a tool that throws ends the
+ * agent's turn, while an error it can read lets it report the gap honestly.
+ *
+ * Two call shapes (both in the LD tool schema, version 2):
+ *   - single:  { location | lat+lon, days }          → { location, forecast, … }
+ *   - batch:   { locations: [{name, lat, lon}], days } → { forecasts: [...] }
+ * The batch form is what stops a specialist from making 13 sequential tool
+ * calls (one per destination) — the most common cause of the weather
+ * specialist timing out. All locations are fetched in parallel.
+ */
+async function getWeatherForecast({ location, lat, lon, days, locations } = {}) {
+  const span = Math.min(Math.max(Number(days) || 7, 1), 16);
+  const units = { temperature: 'F', wind: 'mph', precipitation: 'mm' };
+
+  if (Array.isArray(locations) && locations.length) {
+    const started = Date.now();
+    const wanted = locations.slice(0, MAX_BATCH).map((l) => (
+      typeof l === 'string'
+        ? { location: l }
+        : { location: l?.name || l?.location || null, lat: l?.lat, lon: l?.lon }
+    ));
+    const forecasts = await Promise.all(wanted.map((l) => forecastOne(l, span)));
+    logger.info('tool_weather_forecast_batch', {
+      requested: locations.length, fetched: forecasts.filter((f) => !f.error).length, duration_ms: Date.now() - started,
+    });
+    const result = { units, days: span, forecasts };
+    if (locations.length > MAX_BATCH) result.note = `Only the first ${MAX_BATCH} locations were fetched.`;
+    return result;
+  }
+
+  const one = await forecastOne({ location, lat, lon }, span);
+  return one.error ? one : { ...one, units };
 }
 
 module.exports = { getWeatherForecast, isFictionalPlace, WMO };

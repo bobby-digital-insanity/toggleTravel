@@ -29,9 +29,20 @@
  *    them (and records the call for the dev view).
  */
 
+const Mustache = require('mustache');
 const logger = require('./logger');
 
 const GRAPH_KEY = 'ai-planner-graph';
+
+// Prompts authored in LaunchDarkly are Mustache: `{{user_name}}`, dotted paths
+// like `{{ldctx.tier}}`, and sections such as `{{#signed_in}}…{{/signed_in}}`.
+// The new SDK's own parseTemplate() only substitutes `{{name}}`, so a section
+// would reach the model as literal braces — hence a real Mustache render here,
+// with HTML escaping off (these are prompts, not web pages).
+function renderTemplate(template, variables = {}) {
+  if (typeof template !== 'string' || !template) return template;
+  return Mustache.render(template, variables, {}, { escape: (v) => String(v) });
+}
 
 let sdkPromise = null;
 
@@ -142,8 +153,8 @@ let handlerPromise = null;
 function loadAgentHandler() {
   if (!handlerPromise) {
     handlerPromise = (async () => {
-      const { createHandler, parseTemplate } = await loadSdk();
-      const [{ createAgent }, { ChatAnthropic }, messages, tools] = await Promise.all([
+      const { createHandler } = await loadSdk();
+      const [{ createAgent, toolStrategy, anthropicPromptCachingMiddleware }, { ChatAnthropic }, messages, tools] = await Promise.all([
         import('langchain'),
         import('@langchain/anthropic'),
         import('@langchain/core/messages'),
@@ -158,6 +169,8 @@ function loadAgentHandler() {
         const model = new ChatAnthropic({
           model: cfg.model?.name,
           ...(Number.isFinite(Number(maxTokens)) ? { maxTokens: Number(maxTokens) } : {}),
+          // Provider 429/529/5xx: the Anthropic client retries with backoff.
+          maxRetries: 2,
         });
 
         // LD declares each tool's name, description and JSON schema; the caller
@@ -172,10 +185,27 @@ function loadAgentHandler() {
           }));
 
         const systemPrompt = cfg.instructions
-          ? parseTemplate(cfg.instructions, variables)
+          ? renderTemplate(cfg.instructions, variables)
           : undefined;
 
-        const agent = createAgent({ model, tools: bound, ...(systemPrompt ? { systemPrompt } : {}) });
+        // Structured output. The schema comes from the node's LD config
+        // (`outputFormat`) when LD has one, else from the caller (the
+        // supervisor passes its PLAN schema in `variables.__outputFormat`).
+        // LangChain turns it into a forced tool call, so the model cannot
+        // answer with prose that fails to parse.
+        const schema = cfg.outputFormat || variables.__outputFormat || null;
+
+        const agent = createAgent({
+          model,
+          tools: bound,
+          ...(systemPrompt ? { systemPrompt } : {}),
+          ...(schema ? { responseFormat: toolStrategy(schema) } : {}),
+          // Anthropic prompt caching: the specialist instructions + tool
+          // schemas are identical across calls, so cache the prefix. Only
+          // bites above the model's minimum cacheable size (1024 tokens on
+          // Sonnet/Opus, higher on Haiku); harmless below it.
+          middleware: [anthropicPromptCachingMiddleware({ ttl: '5m', unsupportedModelBehavior: 'ignore' })],
+        });
         const result = await agent.invoke({ messages: [new HumanMessage(userInput)] });
 
         let inputTokens = 0;
@@ -183,13 +213,18 @@ function loadAgentHandler() {
         for (const msg of result.messages || []) {
           const usage = msg?.usage_metadata;
           if (usage) {
+            // LangChain's input_tokens already includes cached tokens.
             inputTokens += Number(usage.input_tokens || 0);
             outputTokens += Number(usage.output_tokens || 0);
           }
         }
 
+        const output = schema && result.structuredResponse
+          ? JSON.stringify(result.structuredResponse)
+          : extractText(result.messages);
+
         return {
-          output: extractText(result.messages),
+          output,
           usage: { input_tokens: inputTokens, output_tokens: outputTokens },
         };
       });
@@ -260,4 +295,4 @@ function createGraphRun(ldClient, context, graphMeta = {}) {
   };
 }
 
-module.exports = { GRAPH_KEY, loadSdk, initGraphSdk, instrumentTools, resolveAgentGraph, createGraphRun, extractText };
+module.exports = { GRAPH_KEY, loadSdk, initGraphSdk, instrumentTools, resolveAgentGraph, createGraphRun, extractText, renderTemplate };

@@ -750,7 +750,9 @@
           ['specialists chosen', (p.specialists || []).join(', ') || 'none'],
           ['chosen from', (d.graph?.edges || []).length ? (d.graph.edges.length + ' available on the graph') : null],
           ['reasoning', p.reasoning],
-          ['plan parsed', p.parsed === false ? 'no — consulted every specialist' : null, p.parsed === false ? 'v-fail' : null],
+          ['plan output', p.parsed ? (p.structured ? 'structured (forced JSON schema)' : 'parsed from text') : null],
+          ['plan parsed', p.parsed === false ? 'no — fell back to ' + (p.fellBackTo || 'the cheapest specialist') : null, p.parsed === false ? 'v-fail' : null],
+          ['catalog pre-fetched', p.catalogPrefetched ? p.catalogPrefetched + ' destinations handed to each specialist (no per-specialist catalog call)' : null],
           ['latency', p.durationMs != null ? p.durationMs + 'ms' : null],
           ['tokens', fmtAgentTokens(p.tokens)],
         ]);
@@ -767,7 +769,8 @@
             ['tool calls', calls.length || null],
             ['latency', sp.durationMs != null ? sp.durationMs + 'ms' : null],
             ['tokens', fmtAgentTokens(sp.tokens)],
-            ['status', sp.error ? 'FAILED' : 'ok', sp.error ? 'v-fail' : 'v-pass'],
+            ['required (LD handoff)', sp.required ? 'yes' : null],
+            ['status', sp.error ? (sp.required ? 'FAILED — required, customer told it is unverified' : 'FAILED') : 'ok', sp.error ? 'v-fail' : 'v-pass'],
             ['error', sp.error],
             ['findings', sp.content ? sp.content.slice(0, 400) + (sp.content.length > 400 ? '…' : '') : null],
           ]);

@@ -346,6 +346,162 @@ async function run(log = defaultLog) {
 // Registered by the step-4/6 sections further down this file.
 const EXTRA_SECTIONS = [];
 
+// ── §5.2 get_weather_forecast v2: batch `locations` ──────────────────────────
+
+const WEATHER_TOOL_KEY = 'get_weather_forecast';
+const WEATHER_TOOL_V2 = {
+  description: 'Get the real daily weather forecast for one location, or for MANY locations in one call. Returns per-day high and low temperature in Fahrenheit, precipitation probability, rainfall in mm, peak wind gusts, a WMO weather code with a text label, and a severe-weather flag. To compare several destinations, pass them all in `locations` (name plus lat/lon from the catalog) in a single call instead of calling once per destination. Use this for any question about what the weather will actually be like. Never estimate weather yourself.',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      location: { type: 'string', description: "Destination name, e.g. 'Kyoto, Japan'. Use for a single location when `locations` is not given." },
+      lat: { type: 'number', description: 'Latitude in decimal degrees (single location).' },
+      lon: { type: 'number', description: 'Longitude in decimal degrees (single location).' },
+      locations: {
+        type: 'array',
+        description: 'Batch form: several destinations in ONE call. Prefer this whenever you need more than one forecast.',
+        maxItems: 16,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', description: 'Destination name as it appears in the catalog.' },
+            lat: { type: 'number' },
+            lon: { type: 'number' },
+          },
+          required: ['name'],
+        },
+      },
+      days: { type: 'integer', description: 'Number of forecast days, 1-16. Defaults to 7.' },
+    },
+  },
+};
+
+const WEATHER_TOOL_USERS = [
+  { config: 'ai-planner-agent-weather', variation: 'haiku' },
+  { config: 'ai-planner-agent-timing', variation: 'sonnet-5' },
+];
+
+async function weatherToolV2(log) {
+  const toolsUrl = `/api/v2/projects/${PROJECT_KEY}/ai-tools`;
+  const current = await ld('GET', `${toolsUrl}/${WEATHER_TOOL_KEY}`, { beta: true });
+  let version = current.version;
+  const hasBatch = !!current.schema?.properties?.locations;
+  if (hasBatch) {
+    log(`  ${WEATHER_TOOL_KEY} v${version} already has \`locations\``);
+  } else {
+    // Editing a tool's schema creates a new version; existing variations keep
+    // pinning the old one until re-attached below.
+    const updated = await ld('PATCH', `${toolsUrl}/${WEATHER_TOOL_KEY}`, { beta: true, body: WEATHER_TOOL_V2 });
+    version = updated.version ?? (await ld('GET', `${toolsUrl}/${WEATHER_TOOL_KEY}`, { beta: true })).version;
+    log(`  ${WEATHER_TOOL_KEY}: new version v${version} with \`locations\` batch form`);
+  }
+  if (DRY_RUN && !hasBatch) version = (current.version || 1) + 1;
+
+  for (const { config, variation } of WEATHER_TOOL_USERS) {
+    const cfg = await getAiConfig(config);
+    const v = cfg.variations.find((x) => x.key === variation) || cfg.variations[0];
+    if (!v) continue;
+    const tools = (v.tools || []).map((t) => ({ key: t.key, version: t.version }));
+    const weather = tools.find((t) => t.key === WEATHER_TOOL_KEY);
+    if (weather && weather.version === version) { log(`  ${config}/${v.key}: already on ${WEATHER_TOOL_KEY} v${version}`); continue; }
+    const next = weather
+      ? tools.map((t) => (t.key === WEATHER_TOOL_KEY ? { ...t, version } : t))
+      : [...tools, { key: WEATHER_TOOL_KEY, version }];
+    await patchVariation(config, v.key, { tools: next, comment: `AI Planner review §5.2: ${WEATHER_TOOL_KEY} v${version} (batch locations)` });
+    log(`  ${config}/${v.key}: attached ${WEATHER_TOOL_KEY} v${version}`);
+  }
+
+  // The weather specialist's instructions said "call get_weather_forecast for
+  // every candidate" — with the batch form that is one call, not thirteen.
+  const weatherCfg = await getAiConfig('ai-planner-agent-weather');
+  for (const v of weatherCfg.variations) {
+    const text = v.instructions || '';
+    if (/locations/.test(text)) { log(`  ai-planner-agent-weather/${v.key}: instructions already mention the batch form`); continue; }
+    const replaced = text.replace(
+      /2\. Call get_weather_forecast for every candidate\. Always pass the lat and lon from the catalog/,
+      '2. Call get_weather_forecast ONCE with `locations` set to every candidate (name, lat and lon from the catalog) — one batched call, not one call per destination',
+    );
+    if (replaced === text) { log(`  ai-planner-agent-weather/${v.key}: instruction sentence not found — edit by hand`); continue; }
+    await patchVariation('ai-planner-agent-weather', v.key, { instructions: replaced, comment: 'AI Planner review §5.2: prefer the batched weather call' });
+    log(`  ai-planner-agent-weather/${v.key}: instructions updated for the batch form`);
+  }
+}
+
+// ── §5.5 explicit max_tokens on every agent variation ────────────────────────
+// Opus 5 and Sonnet 5 spend part of the budget on thinking, so these are more
+// generous than a pure-output estimate: a truncated PLAN JSON would cost a
+// whole fan-out of the wrong specialists.
+
+const AGENT_MAX_TOKENS = {
+  'ai-planner-agent': 1024,          // PLAN — small JSON object
+  'ai-planner-agent-compose': 1024,  // COMPOSE — "under 180 words"
+  'ai-planner-agent-weather': 2048,
+  'ai-planner-agent-location': 2048,
+  'ai-planner-agent-budget': 2048,
+  'ai-planner-agent-timing': 2048,
+};
+
+async function agentMaxTokens(log) {
+  for (const [cfgKey, maxTokens] of Object.entries(AGENT_MAX_TOKENS)) {
+    const cfg = await getAiConfig(cfgKey);
+    for (const v of cfg.variations) {
+      const current = v.model?.parameters?.max_tokens;
+      if (current === maxTokens) { log(`  ${cfgKey}/${v.key}: max_tokens already ${maxTokens}`); continue; }
+      await patchVariation(cfgKey, v.key, {
+        modelConfigKey: v.modelConfigKey,
+        model: { ...(v.model || {}), parameters: { ...(v.model?.parameters || {}), max_tokens: maxTokens } },
+        comment: `AI Planner review §5.5: explicit max_tokens=${maxTokens} so the cost ceiling is LD config`,
+      });
+      log(`  ${cfgKey}/${v.key}: max_tokens ${current ?? 'unset'} → ${maxTokens}`);
+    }
+  }
+}
+
+// ── §5.4 PLAN structured output declared in LD (best effort) ─────────────────
+// The code already forces a JSON schema for PLAN (agents/supervisor.js); if the
+// variation carries `outputFormat`, that wins — so the schema is LD config. The
+// AI Config REST API may not accept the field yet; a 4xx is reported, not fatal.
+
+const PLAN_OUTPUT_FORMAT = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    constraints: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        tempF: { type: ['string', 'null'] }, weather: { type: ['string', 'null'] }, budget: { type: ['string', 'null'] },
+        vibe: { type: ['string', 'null'] }, window: { type: ['string', 'null'] },
+      },
+      required: ['tempF', 'weather', 'budget', 'vibe', 'window'],
+    },
+    specialists: { type: 'array', items: { type: 'string' } },
+    reasoning: { type: 'string' },
+  },
+  required: ['constraints', 'specialists', 'reasoning'],
+};
+
+async function planOutputFormat(log) {
+  const cfg = await getAiConfig('ai-planner-agent');
+  for (const v of cfg.variations) {
+    if (v.outputFormat) { log(`  ai-planner-agent/${v.key}: outputFormat already set`); continue; }
+    try {
+      await patchVariation('ai-planner-agent', v.key, { outputFormat: PLAN_OUTPUT_FORMAT, comment: 'AI Planner review §5.4: PLAN output schema as LD config' });
+      log(`  ai-planner-agent/${v.key}: outputFormat set`);
+    } catch (err) {
+      if (err.status && err.status < 500) { log(`  ai-planner-agent/${v.key}: API declined outputFormat (${err.status}) — the code-side schema stays in force`); continue; }
+      throw err;
+    }
+  }
+}
+
+EXTRA_SECTIONS.push(
+  (log) => section('5.2', 'get_weather_forecast v2 with batch `locations`, attached to weather + timing', log, weatherToolV2),
+  (log) => section('5.5', 'explicit max_tokens on every agent-mode variation', log, agentMaxTokens),
+  (log) => section('5.4', 'PLAN output schema on ai-planner-agent (best effort)', log, planOutputFormat),
+);
+
 module.exports = { run, section, ld, getAiConfig, getBackingFlag, patchVariation, aiTargetingPatch, EXTRA_SECTIONS, PROJECT_KEY, ENV_KEY, MAINTAINER_ID, HAIKU_MODEL, SONNET_MODEL, OPUS_MODEL, PLANNER_KEY };
 
 if (require.main === module) {
