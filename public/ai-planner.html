@@ -14,6 +14,66 @@
     .planner-header h1 { font-size: 2.2rem; font-weight: 900; letter-spacing: -.8px; margin-bottom: 6px; }
     .planner-header p { color: var(--text-muted); font-size: 1.02rem; }
 
+    /* Mode toggle — Conversation (default) vs Agent. Pill track in the brand
+       color with a sliding white thumb marking the active mode.
+       Centered over the chat card below. */
+    .mode-toggle-row { display: flex; justify-content: center; margin-bottom: 16px; }
+    .mode-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: stretch;
+      padding: 5px;
+      background: var(--brand-primary);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+    }
+    /* The thumb's left/width are set in JS from the active segment's measured
+       box — the two labels aren't the same length, so a fixed 50% would sit
+       off-center on one side. */
+    .mt-thumb {
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      left: 5px;
+      width: 0;
+      background: var(--surface);
+      border-radius: 999px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.18);
+      transition: left var(--transition), width var(--transition);
+      pointer-events: none;
+    }
+    .mt-opt {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 22px;
+      background: transparent;
+      border: 0;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: .92rem;
+      font-weight: 700;
+      white-space: nowrap;
+      color: rgba(255,255,255,.92);
+      cursor: pointer;
+      transition: color var(--transition);
+    }
+    .mt-opt:hover { color: #fff; }
+    .mt-opt[aria-checked="true"], .mt-opt[aria-checked="true"]:hover { color: var(--brand-primary); }
+    .mt-opt svg { width: 17px; height: 17px; flex-shrink: 0; }
+    .mt-opt:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+    .mode-toggle-row[hidden] { display: none; }
+
+    .agent-progress {
+      font-size: .76rem;
+      color: var(--text-light);
+      padding-left: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
     .chat-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -103,6 +163,15 @@
     }
     .meta-block .meta-line b { color: #e2e8f0; font-weight: 600; }
     .meta-block .devhl { color: #60a5fa; font-weight: 800; }
+    /* Rendered prompt: keep the config's own line breaks, on its own line. */
+    .meta-block .prompt-pre {
+      display: block;
+      white-space: pre-wrap;
+      color: #cbd5e1;
+      border-left: 2px solid #1e3a5f;
+      padding: 2px 0 2px 10px;
+      margin: 3px 0 5px;
+    }
     .meta-block .v-pass { color: #4ade80; font-weight: 800; text-transform: uppercase; }
     .meta-block .v-fail { color: #f87171; font-weight: 800; text-transform: uppercase; }
 
@@ -273,12 +342,36 @@
   <main class="planner-wrap">
     <div class="planner-header">
       <h1>AI Travel Planner</h1>
-      <p>Plan your next trip with our AI assistant — powered by Google Gemini.</p>
+      <p>Plan your next trip with our AI assistant — powered by Claude.</p>
     </div>
 
     <!-- Enabled view: shown only when the ai-planner-enabled flag resolves true.
          Starts hidden so the default state never flashes before LD resolves. -->
     <div id="planner-enabled-view" hidden>
+      <!-- Mode toggle: Conversation (default) or Agent. -->
+      <div class="mode-toggle-row" hidden>
+        <div class="mode-toggle" id="mode-toggle" data-mode="conversation" role="radiogroup" aria-label="Planner mode">
+          <span class="mt-thumb" aria-hidden="true"></span>
+          <button type="button" class="mt-opt" role="radio" aria-checked="true" data-mode="conversation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+            <span>Conversation</span>
+          </button>
+          <button type="button" class="mt-opt" role="radio" aria-checked="false" data-mode="agent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4" y="8" width="16" height="12" rx="3"/>
+              <path d="M12 5v3"/>
+              <circle cx="12" cy="3.5" r="1.2"/>
+              <path d="M9 13h.01"/>
+              <path d="M15 13h.01"/>
+              <path d="M9.5 16.5h5"/>
+            </svg>
+            <span>Agent</span>
+          </button>
+        </div>
+      </div>
+
       <div class="chat-card">
         <!-- Model banner: shows the model + params from the LD AI Config (ai-planner). -->
         <div class="model-banner" id="model-banner">
@@ -329,7 +422,7 @@
     </div>
     <div class="footer-bottom">
       <span>© 2026 Toggle Travel</span>
-      <span>Powered by Google Gemini</span>
+      <span>Powered by Claude</span>
     </div>
   </footer>
 
@@ -347,6 +440,17 @@
       function applyFlag(enabled) {
         enabledView.hidden = !enabled;
         disabledView.hidden = !!enabled;
+        // The mode toggle can only be measured once its container is visible.
+        if (enabled) positionModeThumb();
+      }
+
+      // Agent mode is gated separately: it costs roughly 30x a conversation
+      // turn, so when the flag is off the toggle is hidden entirely and the page
+      // behaves exactly as it did before agent mode existed.
+      function applyAgentFlag(enabled) {
+        modeToggleRow.hidden = !enabled;
+        if (!enabled && plannerMode !== 'conversation') setMode('conversation');
+        if (enabled) positionModeThumb();
       }
 
       // Gate the page on ai-planner-enabled. Both views start hidden, so
@@ -357,7 +461,54 @@
         await LDFlags.init();
         applyFlag(LDFlags.get('ai-planner-enabled'));
         LDFlags.onChange('ai-planner-enabled', applyFlag);
+        applyAgentFlag(LDFlags.get('ai-planner-agent-enabled'));
+        LDFlags.onChange('ai-planner-agent-enabled', applyAgentFlag);
       })();
+
+      // ── Mode toggle (Conversation | Agent) ──────────────────────────────
+      // Tracks which mode the page is in. Conversation is the default; the
+      // value is exposed as plannerMode for whatever consumes it next.
+      const modeToggleRow = document.querySelector('.mode-toggle-row');
+      const modeToggle = document.getElementById('mode-toggle');
+      const modeThumb = modeToggle.querySelector('.mt-thumb');
+      const modeOpts = Array.from(modeToggle.querySelectorAll('.mt-opt'));
+      let plannerMode = modeToggle.dataset.mode;
+
+      // Size and place the white thumb over the active segment. Measured rather
+      // than a fixed 50% because the two labels are different lengths.
+      function positionModeThumb() {
+        const active = modeOpts.find((b) => b.dataset.mode === plannerMode);
+        if (!active || !active.offsetWidth) return;
+        modeThumb.style.width = active.offsetWidth + 'px';
+        modeThumb.style.left = active.offsetLeft + 'px';
+      }
+
+      function setMode(mode) {
+        if (mode === plannerMode) return;
+        plannerMode = mode;
+        modeToggle.dataset.mode = mode;
+        modeOpts.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
+        positionModeThumb();
+        // The banner belongs to the active mode — refresh it immediately rather
+        // than waiting up to 10s for the next poll.
+        if (typeof loadConfig === 'function') loadConfig();
+      }
+
+      // Re-measure when the layout or the loaded font changes the label widths.
+      window.addEventListener('resize', positionModeThumb);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(positionModeThumb);
+
+      modeOpts.forEach((btn) => {
+        btn.addEventListener('click', () => setMode(btn.dataset.mode));
+        // Arrow keys move between segments, as expected of a radiogroup.
+        btn.addEventListener('keydown', (e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const next = modeOpts[(modeOpts.indexOf(btn) + (e.key === 'ArrowRight' ? 1 : modeOpts.length - 1)) % modeOpts.length];
+          setMode(next.dataset.mode);
+          next.focus();
+        });
+      });
 
       const win = document.getElementById('chat-window');
       const form = document.getElementById('composer');
@@ -428,11 +579,34 @@
           pill.appendChild(val);
           mbParams.appendChild(pill);
         }
+        // Agent mode serves no model parameters, so without these the banner
+        // would show nothing about the fan-out that just happened.
+        if (meta.mode === 'agent') {
+          const addPill = (label, value) => {
+            const pill = document.createElement('span');
+            pill.className = 'mb-pill';
+            pill.appendChild(document.createTextNode(label + ': '));
+            const val = document.createElement('b');
+            val.textContent = String(value);
+            pill.appendChild(val);
+            mbParams.appendChild(pill);
+          };
+          // Two shapes reach here: a completed turn sends the specialist names
+          // it consulted (strings), while /agent-config sends the full roster
+          // (objects with label + model). Normalize before joining.
+          const names = (meta.specialists || []).map((sp) => (typeof sp === 'string' ? sp : sp.label));
+          addPill(meta.toolCalls == null ? 'specialist team' : 'specialists', names.join(', ') || 'none');
+          if (meta.toolCalls != null) addPill('tool calls', meta.toolCalls);
+        }
       }
 
+      // Poll the config for whichever mode is active. Without the mode check
+      // this 10s poll would overwrite the agent banner with the conversation
+      // model — and since an agent turn takes longer than 10s, it always would.
       async function loadConfig() {
+        const url = plannerMode === 'agent' ? '/api/ai-planner/agent-config' : '/api/ai-planner/config';
         try {
-          const res = await fetch('/api/ai-planner/config', { headers: authHeaders() });
+          const res = await fetch(url, { headers: authHeaders() });
           if (res.ok) renderBanner(await res.json());
         } catch { /* leave last-known values on the banner */ }
       }
@@ -515,9 +689,91 @@
         win.scrollTop = win.scrollHeight;
       }
 
+      // Agent mode dev view: the supervisor's plan, then one block per
+      // specialist showing which tools it actually called, then the compose
+      // step. Ordered so the plan appears before the answer and the specialist
+      // work reads top-to-bottom in the order it was dispatched.
+      function renderAgentTurn(data) {
+        const d = data.debug || {};
+
+        appendMeta('🔀 Routing — before the answer', [
+          ['context.key', d.context?.key],
+          ['context.tier', d.context?.tier, true],
+          ['classifier config', d.classifier?.configKey],
+          ['classifier model', d.classifier?.model],
+          ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
+          ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
+          ['classifier error', d.classifier?.error],
+        ]);
+
+        const p = d.plan || {};
+        appendMeta('🧭 Supervisor — PLAN phase', [
+          ['LD AI Config', p.configKey],
+          ['model', p.model],
+          ['routed by', 'targeting rule on context.complexity = ' + (d.context?.complexity || '?')],
+          ['constraints', p.constraints ? JSON.stringify(p.constraints) : null],
+          ['specialists chosen', (p.specialists || []).join(', ') || 'none'],
+          ['reasoning', p.reasoning],
+          ['plan parsed', p.parsed === false ? 'no — consulted every specialist' : null, p.parsed === false ? 'v-fail' : null],
+          ['latency', p.durationMs != null ? p.durationMs + 'ms' : null],
+          ['tokens', fmtAgentTokens(p.tokens)],
+        ]);
+
+        (d.specialists || []).forEach((sp) => {
+          const calls = sp.toolCalls || [];
+          const counts = calls.reduce((acc, name) => { acc[name] = (acc[name] || 0) + 1; return acc; }, {});
+          const toolSummary = Object.keys(counts).map((k) => k + ' ×' + counts[k]).join(', ');
+          appendMeta('🛠 ' + sp.label + ' specialist', [
+            ['LD AI Config', sp.configKey],
+            ['model', sp.model],
+            ['tools called', toolSummary || 'none'],
+            ['tool calls', calls.length || null],
+            ['latency', sp.durationMs != null ? sp.durationMs + 'ms' : null],
+            ['tokens', fmtAgentTokens(sp.tokens)],
+            ['status', sp.error ? 'FAILED' : 'ok', sp.error ? 'v-fail' : 'v-pass'],
+            ['error', sp.error],
+            ['findings', sp.content ? sp.content.slice(0, 400) + (sp.content.length > 400 ? '…' : '') : null],
+          ]);
+        });
+
+        appendMessage('assistant', data.reply, data.feedbackToken);
+
+        const c = d.compose || {};
+        const m = data.meta || {};
+        appendMeta('🧠 Supervisor — COMPOSE phase', [
+          ['LD AI Config', c.configKey],
+          ['model', c.model],
+          ['specialists consulted', (m.specialists || []).length || 0],
+          ['total tool calls', m.toolCalls ?? null],
+          ['compose latency', c.durationMs != null ? c.durationMs + 'ms' : null],
+          ['compose tokens', fmtAgentTokens(c.tokens)],
+          ['turn total', d.totalDurationMs != null ? d.totalDurationMs + 'ms' : null],
+        ]);
+        (d.judges || []).forEach((j) => {
+          appendMeta('⚖️ Judge — scored the answer', [
+            ['judge config', j.configKey],
+            ['metric', j.metricKey],
+            ['judge model', j.model],
+            ['score', j.score != null ? j.score.toFixed(2) + (j.threshold != null ? ' (threshold ' + j.threshold + ')' : '') : null],
+            ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
+            ['reasoning', j.reasoning],
+            ['sampled', j.sampled === false ? 'no — skipped by sampling' : null],
+            ['error', j.error],
+          ]);
+        });
+
+      }
+
       function fmtTokens(t) {
         if (!t) return null;
         return 'in ' + (t.inputTokens ?? '?') + ' · out ' + (t.outputTokens ?? '?') + ' · total ' + (t.totalTokens ?? '?');
+      }
+
+      // Agent-mode metrics come from the LD AI SDK as LDTokenUsage
+      // ({total, input, output}), not the provider shape fmtTokens expects.
+      function fmtAgentTokens(t) {
+        if (!t) return null;
+        return 'in ' + (t.input ?? '?') + ' · out ' + (t.output ?? '?') + ' · total ' + (t.total ?? '?');
       }
 
       function buildFeedback(token) {
@@ -543,16 +799,36 @@
         return row;
       }
 
-      function showTyping() {
+      let elapsedTimer = null;
+
+      function showTyping(withElapsed) {
         const wrap = document.createElement('div');
         wrap.className = 'msg assistant';
         wrap.id = 'typing-indicator';
         wrap.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
         win.appendChild(wrap);
+
+        // Agent turns take tens of seconds (a supervisor plan, up to four
+        // specialists, then the compose step). Report elapsed time honestly
+        // instead of implying progress we cannot observe until the reply lands.
+        if (withElapsed) {
+          const note = document.createElement('div');
+          note.className = 'agent-progress';
+          note.id = 'agent-progress';
+          const started = Date.now();
+          const tick = () => {
+            note.textContent = 'Agents working — planning, consulting specialists, composing… '
+              + Math.round((Date.now() - started) / 1000) + 's';
+          };
+          tick();
+          elapsedTimer = setInterval(tick, 1000);
+          wrap.appendChild(note);
+        }
         win.scrollTop = win.scrollHeight;
       }
 
       function hideTyping() {
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
         const el = document.getElementById('typing-indicator');
         if (el) el.remove();
       }
@@ -570,13 +846,16 @@
         input.value = '';
         input.disabled = true;
         sendBtn.disabled = true;
-        showTyping();
 
+        const agentMode = plannerMode === 'agent';
+        showTyping(agentMode);
         try {
-          const res = await fetch('/api/ai-planner/chat', {
+          const res = await fetch(agentMode ? '/api/ai-planner/agent-chat' : '/api/ai-planner/chat', {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ message, conversationHistory: history }),
+            // Agent mode is single-turn: the supervisor re-plans each request,
+            // so there is no conversation history to thread through it.
+            body: JSON.stringify(agentMode ? { message } : { message, conversationHistory: history }),
           });
           hideTyping();
           if (!res.ok) {
@@ -585,6 +864,13 @@
             return;
           }
           const data = await res.json();
+
+          if (agentMode) {
+            renderAgentTurn(data);
+            if (data.meta) renderBanner(data.meta);
+            return;
+          }
+
           // Dev view — routing block goes in BEFORE the answer bubble.
           if (data.debug) {
             const d = data.debug;
@@ -592,8 +878,12 @@
               ['context.key', d.context?.key],
               ['context.name', d.context?.name],
               ['context.tier', d.context?.tier, true],
-              ['prompt {{name}}', d.promptVariables?.name],
-              ['prompt {{tier}}', d.promptVariables?.tier, true],
+              ['prompt {{user_name}}', d.promptVariables?.user_name],
+              ['prompt {{product_tier}}', d.promptVariables?.product_tier, true],
+              ['prompt {{signed_in}}', String(!!d.promptVariables?.signed_in)],
+              // The system prompt as sent — LD's template with the variables
+              // already substituted, so the personalization is visible.
+              ['system prompt (rendered)', d.systemPrompt, 'prompt-pre'],
               ['classifier config', d.classifier?.configKey],
               ['classifier model', d.classifier?.model],
               ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
@@ -658,6 +948,31 @@
       });
 
       // Demo buttons: pick a random canned question and fire it immediately.
+      // Agent mode asks different questions of the same three chips: one
+      // constraint (one specialist), many constraints (the full fan-out), and a
+      // question no tool can answer (so the honest reply is "I can't check").
+      const AGENT_PROMPTS = {
+        'demo-simple': [
+          'Will it rain in Kyoto next week?',
+          "What's the weather going to be like in Bali over the next few days?",
+          'Is Iceland going to be freezing this week?',
+          'Which of your destinations is the best value per night?',
+        ],
+        'demo-complex': [
+          "I want to book a flight to someplace that is going to be low 70's F over the next week, no rain or storms for cheap, and I want a great food scene",
+          'Find me somewhere under $2500 that sits in the 70s next week with no storms and a serious food scene — and tell me whether I should shift my dates.',
+          "I've got a week off starting soon. I want warm but not hot, dry, good value per night, and somewhere worth going purely for the food. Where and when?",
+          'Somewhere in the low 70s with no rain, great food, and cheap per night — and is next week actually the right week to go?',
+        ],
+        // No tool can price a fare or check flight status, so the correct answer
+        // is to say so. A weak model invents numbers instead.
+        'demo-bad': [
+          "What's the cheapest business-class fare to Tokyo next Tuesday, and will my flight be delayed?",
+          'How much will a flight to Bali cost next Friday, and are there any window seats left?',
+          'Exactly what will I pay in baggage fees and seat upgrades for a trip to Rome next month?',
+        ],
+      };
+
       const DEMO_PROMPTS = {
         'demo-simple': [
           "What's the typical carry-on baggage allowance for an economy flight to Miami?",
@@ -684,7 +999,7 @@
       Object.keys(DEMO_PROMPTS).forEach((id) => {
         document.getElementById(id).addEventListener('click', () => {
           if (input.disabled) return; // a send is already in flight
-          const pool = DEMO_PROMPTS[id];
+          const pool = (plannerMode === 'agent' ? AGENT_PROMPTS : DEMO_PROMPTS)[id];
           input.value = pool[Math.floor(Math.random() * pool.length)];
           send(input.value);
         });

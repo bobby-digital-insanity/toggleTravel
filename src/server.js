@@ -11,6 +11,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 
 const logger = require('./logger');
 const requestLogger = require('./middleware/requestLogger');
@@ -41,12 +42,27 @@ app.use(requestLogger);
 // Static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// ── LaunchDarkly dev toolbar — local development only ────────────────────
+// LD requires the toolbar never render in a hosted environment, so it is gated
+// three ways and all three have to pass:
+//   1. NODE_ENV !== 'production'  (PM2 sets production on EC2)
+//   2. @launchdarkly/toolbar is on disk — it's a devDependency, and the deploy
+//      workflow runs `npm install --omit=dev`, so it isn't installed in prod
+//   3. flags.js additionally checks the browser is on localhost
+// When the gate is closed the bundle isn't served at all, so a hosted page has
+// nothing to fetch even if the client-side check were bypassed.
+const toolbarDir = path.join(__dirname, '..', 'node_modules', '@launchdarkly', 'toolbar');
+const devToolbarEnabled = process.env.NODE_ENV !== 'production' && fs.existsSync(toolbarDir);
+if (devToolbarEnabled) {
+  app.use('/vendor/ld-toolbar', express.static(toolbarDir));
+}
+
 // Health routes (no /api prefix)
 app.use('/', healthRouter);
 
 // Expose client-side LD ID to the frontend
 app.get('/api/config', (req, res) => {
-  res.json({ ldClientSideId: ld.getClientSideId() });
+  res.json({ ldClientSideId: ld.getClientSideId(), devToolbar: devToolbarEnabled });
 });
 
 // API routes

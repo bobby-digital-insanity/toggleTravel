@@ -4,7 +4,9 @@ const express = require('express');
 const router = express.Router();
 const { chat: geminiChat } = require('../gemini');
 const { chat: claudeChat } = require('../anthropic');
-const { getFlag, getCompletionConfig, getJudgeConfig, track, recordFeedback } = require('../launchdarkly');
+const { chat: openaiChat } = require('../openai');
+const { getFlag, getCompletionConfig, getJudgeConfig, getAgentConfig, track, recordFeedback } = require('../launchdarkly');
+const { runAgentTurn, SPECIALISTS } = require('../agents/supervisor');
 const logger = require('../logger');
 
 // The LaunchDarkly AI Config (completion mode) that drives this planner.
@@ -15,8 +17,25 @@ const AI_CONFIG_KEY = 'ai-planner';
 // else defaults to Gemini. Both modules expose an identical chat() interface.
 function pickChat(provider, model) {
   const hay = `${provider || ''} ${model || ''}`.toLowerCase();
+  if (hay.includes('openai') || hay.includes('gpt') || /\bo[0-9]\b/.test(hay)) return openaiChat;
   if (hay.includes('anthropic') || hay.includes('claude')) return claudeChat;
-  return geminiChat;
+  return geminiChat; // default / Gemini + Google
+}
+
+// Claude's 4.6+ generation removed the sampling parameters: sending
+// `temperature`, `topP`, or `topK` to Opus 5 or Sonnet 5 returns a hard 400
+// ("`temperature` is deprecated for this model"), while Haiku 4.5 still accepts
+// them. LD serves one parameter set per variation, so strip the sampling knobs
+// for models that reject them rather than making every variation's author
+// remember which generation they are on.
+function rejectsSamplingParams(model) {
+  return /claude-(?:opus|sonnet|fable|mythos)-(?:5|4-[678])/.test(String(model || ''));
+}
+
+function sanitizeParameters(model, parameters = {}) {
+  if (!rejectsSamplingParams(model)) return parameters;
+  const { temperature, topP, top_p: topPSnake, topK, top_k: topKSnake, ...rest } = parameters;
+  return rest;
 }
 
 // Build the LD evaluation context from headers the AI Planner page sends. Key,
@@ -31,6 +50,42 @@ function buildContext(req) {
   if (name) context.name = name;
   if (tier) context.tier = tier;
   return context;
+}
+
+// Prompt variables for every AI Config resolution on this route. The LD AI SDK
+// Mustache-renders these into the config's messages (completion/judge configs)
+// or instructions (agent configs), so a prompt authored in LaunchDarkly can say
+//
+//   You are a support agent for {{product_tier}} customers.
+//   Address the user as {{user_name}}.
+//
+// and the personalization is config, not string-building in code. Editing that
+// sentence is a variation change in the LD UI — no deploy.
+//
+// The SDK also injects the raw evaluation context as `ldctx`, so a prompt can
+// reach anything on it directly ({{ldctx.tier}}, {{ldctx.key}}) without the
+// variable having to be listed here.
+function buildPromptVariables(context) {
+  const displayName = String(context.name || '').trim();
+  const rawTier = String(context.tier || 'standard');
+  return {
+    // Display name — falls back to a neutral noun so the prompt never renders
+    // "Address the user as ." for anonymous visitors.
+    user_name: displayName || 'traveler',
+    user_key: context.key,
+    // Title Case for the prompt ("Diamond"); context.tier stays lowercase
+    // because that is what the targeting rules in LD match on.
+    product_tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
+    tier_key: rawTier.toLowerCase(),
+    // Truthy/falsy so prompts can use Mustache sections:
+    // {{#signed_in}}Greet {{user_name}} by name.{{/signed_in}}
+    signed_in: !!displayName,
+    today: new Date().toISOString().slice(0, 10),
+    // Legacy aliases — earlier variations of these prompts referenced
+    // {{name}}/{{tier}}. Kept so an unedited variation keeps rendering.
+    name: displayName || 'traveler',
+    tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
+  };
 }
 
 // Fallback used only if LD is unreachable or the config is missing. The model,
@@ -66,7 +121,7 @@ const DEFAULT_CLASSIFIER_CONFIG = {
 async function classifyMessage(message, context) {
   const startedAt = Date.now();
   try {
-    const cfg = await getCompletionConfig(CLASSIFIER_CONFIG_KEY, DEFAULT_CLASSIFIER_CONFIG, context);
+    const cfg = await getCompletionConfig(CLASSIFIER_CONFIG_KEY, DEFAULT_CLASSIFIER_CONFIG, context, buildPromptVariables(context));
     const src = cfg || DEFAULT_CLASSIFIER_CONFIG;
     if (src.enabled === false) {
       return { complexity: 'simple', debug: { configKey: CLASSIFIER_CONFIG_KEY, skipped: 'config disabled' } };
@@ -85,7 +140,7 @@ async function classifyMessage(message, context) {
       // Generous default: Gemini-style thinking models spend output tokens
       // reasoning before the one-word answer.
       maxTokens: params.maxOutputTokens ?? params.maxTokens ?? params.max_tokens ?? 1024,
-      temperature: params.temperature ?? 0,
+      ...sanitizeParameters(model, { temperature: params.temperature ?? 0 }),
     });
 
     let result;
@@ -146,11 +201,14 @@ Score LOW (below 0.5) if the response states, estimates, or implies specific liv
 Score HIGH (0.8 or above) only if the response uses verified data from the conversation or clearly avoids asserting unverifiable specifics.
 Respond ONLY with raw JSON: {"score": <0.0-1.0>, "reasoning": "<one sentence>"}`;
 
+// Judge fallback runs on OpenAI (an independent, non-Claude judge — avoids the
+// self-preference bias of grading Claude answers with Claude). The real judge
+// model/rubric come from the LD judge config `ai-planner-judge`.
 const DEFAULT_JUDGE_CONFIG = {
   enabled: true,
   model: {
-    name: process.env.GEMINI_MODEL || 'gemini-flash-latest',
-    parameters: { temperature: 0, maxOutputTokens: 1024 },
+    name: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    parameters: { temperature: 0, maxTokens: 1024 },
   },
   messages: [{ role: 'system', content: JUDGE_FALLBACK_RUBRIC }],
 };
@@ -172,7 +230,11 @@ function tryParseJson(text) {
 async function judgeAnswer(question, answer, context) {
   const startedAt = Date.now();
   try {
+    // The rubric gets the user context too, so a judge prompt can hold
+    // {{product_tier}} answers to a different bar. message/response come last:
+    // they are the judge's own reserved template fields.
     const cfg = await getJudgeConfig(JUDGE_CONFIG_KEY, DEFAULT_JUDGE_CONFIG, context, {
+      ...buildPromptVariables(context),
       message: question,
       response: answer,
     });
@@ -194,7 +256,7 @@ async function judgeAnswer(question, answer, context) {
       system,
       model,
       maxTokens: params.maxOutputTokens ?? params.maxTokens ?? params.max_tokens ?? 1024,
-      temperature: params.temperature ?? 0,
+      ...sanitizeParameters(model, { temperature: params.temperature ?? 0 }),
     });
 
     let result;
@@ -261,9 +323,12 @@ async function resolvePlannerConfig(context, variables = {}) {
     model: String(rawModel).replace(/^.*\//, ''),
     // Show exactly the parameters LD serves (all of them). Only fall back to
     // defaults if the config provides none (e.g. LD unreachable).
-    parameters: Object.keys(src.model?.parameters || {}).length
-      ? src.model.parameters
-      : { temperature: 0.7, maxOutputTokens: 2048 },
+    parameters: sanitizeParameters(
+      String(rawModel).replace(/^.*\//, ''),
+      Object.keys(src.model?.parameters || {}).length
+        ? src.model.parameters
+        : { temperature: 0.7, maxOutputTokens: 2048 },
+    ),
     // The completion config exposes a createTracker() factory (NOT a .tracker
     // property). A fresh tracker per request is required and gives correct
     // per-variation attribution on LD's Monitoring tab.
@@ -279,6 +344,35 @@ router.get('/config', async (req, res, next) => {
     res.json({ configKey: AI_CONFIG_KEY, enabled, model, parameters });
   } catch (err) {
     logger.warn('ai_planner_config_error', { error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/ai-planner/agent-config — the supervisor + specialist models
+// currently in effect, for the banner while the page is in Agent mode.
+// Resolved without a `complexity` attribute, so this reports the fallthrough
+// (simple-path) variation; a complex request routes to the strong model via the
+// same LD rule at request time.
+router.get('/agent-config', async (req, res, next) => {
+  try {
+    const context = buildContext(req);
+    const supervisor = await getAgentConfig('ai-planner-agent', { enabled: false }, context);
+    const specialists = await Promise.all(
+      Object.entries(SPECIALISTS).map(async ([name, spec]) => {
+        const cfg = await getAgentConfig(spec.key, { enabled: false }, context);
+        return { name, label: spec.label, configKey: spec.key, model: cfg?.model?.name || null, enabled: !!cfg?.enabled };
+      }),
+    );
+    res.json({
+      mode: 'agent',
+      configKey: 'ai-planner-agent',
+      enabled: !!supervisor?.enabled,
+      model: supervisor?.model?.name || null,
+      parameters: supervisor?.model?.parameters || {},
+      specialists,
+    });
+  } catch (err) {
+    logger.warn('ai_planner_agent_config_error', { error: err.message });
     next(err);
   }
 });
@@ -299,6 +393,86 @@ router.post('/feedback', (req, res, next) => {
     res.json({ ok });
   } catch (err) {
     logger.warn('ai_planner_feedback_error', { error: err.message });
+    next(err);
+  }
+});
+
+// POST /api/ai-planner/agent-chat — the multi-agent path behind the page's
+// "Agent" toggle. Same request shape as /chat so the browser can switch modes
+// by changing the URL and nothing else.
+//
+// Agent mode costs roughly 30x a conversation turn (an Opus 5 supervisor, up to
+// four specialists, and a dozen-plus tool calls), so it sits behind its own flag
+// on top of the ai-planner-api gate.
+router.post('/agent-chat', async (req, res, next) => {
+  try {
+    const { message } = req.body || {};
+    if (typeof message !== 'string' || !message.trim()) {
+      const err = new Error('Field "message" must be a non-empty string');
+      err.status = 400;
+      throw err;
+    }
+
+    const context = buildContext(req);
+
+    const apiEnabled = await getFlag('ai-planner-api', false, context.key);
+    if (!apiEnabled) {
+      logger.info('ai_planner_api_disabled', { session_id: context.key, mode: 'agent' });
+      return res.status(503).json({ error: 'The AI Planner is currently unavailable.' });
+    }
+
+    const agentEnabled = await getFlag('ai-planner-agent-enabled', false, context.key);
+    if (!agentEnabled) {
+      logger.info('ai_planner_agent_disabled', { session_id: context.key });
+      return res.status(503).json({ error: 'Agent mode is not available right now.' });
+    }
+
+    // Same classifier as conversation mode, and the same purpose: the verdict is
+    // stamped on the context so the supervisor config's LD targeting rule picks
+    // Sonnet 5 for simple requests and Opus 5 for complex ones. The routing
+    // decision stays in LaunchDarkly.
+    const { complexity, debug: classifierDebug } = await classifyMessage(message, context);
+    context.complexity = complexity;
+
+    // Same variables conversation mode uses — every agent config's
+    // instructions can reference {{user_name}} / {{product_tier}}.
+    const variables = buildPromptVariables(context);
+
+    const out = await runAgentTurn({ message, context, variables });
+
+    // Judge the composed reply with the same LD judge config conversation mode
+    // uses, so both modes are scored by the same rubric on the same metric.
+    // Unlike conversation mode there is no retry: the answer already came from
+    // the full specialist fan-out, so re-asking has nothing new to work with.
+    // The score is a report on the answer, recorded for LD's Monitoring tab.
+    const judge = await judgeAnswer(message, out.reply, context);
+    if (judge && !judge.skipped && judge.score != null) {
+      judge.threshold = await getFlag('ai-planner-judge-threshold', 0.7, context.key);
+      judge.verdict = judge.score >= judge.threshold ? 'pass' : 'fail';
+    }
+
+    res.json({
+      reply: out.reply,
+      meta: out.meta,
+      feedbackToken: out.feedbackToken,
+      debug: {
+        ...out.debug,
+        classifier: classifierDebug,
+        judges: judge ? [{
+          configKey: judge.configKey,
+          metricKey: judge.evaluationMetricKey || null,
+          model: judge.model || null,
+          score: judge.score ?? null,
+          threshold: judge.threshold ?? null,
+          verdict: judge.verdict || null,
+          reasoning: judge.reasoning || null,
+          durationMs: judge.durationMs ?? null,
+          error: judge.error || null,
+        }] : [],
+      },
+    });
+  } catch (err) {
+    logger.warn('ai_planner_agent_chat_error', { error: err.message });
     next(err);
   }
 });
@@ -340,15 +514,10 @@ router.post('/chat', async (req, res, next) => {
     const { complexity, debug: classifierDebug } = await classifyMessage(message, context);
     context.complexity = complexity;
 
-    // 2. Prompt variables: LD prompts can reference {{name}} and {{tier}}
-    //    (Mustache) so personalization is config, not string-building in code.
-    //    Tier is capitalized for display ("Diamond"), while context.tier stays
-    //    lowercase for targeting rules.
-    const rawTier = context.tier || 'standard';
-    const variables = {
-      name: context.name || 'traveler',
-      tier: rawTier.charAt(0).toUpperCase() + rawTier.slice(1),
-    };
+    // 2. Prompt variables: the LD prompt references {{user_name}},
+    //    {{product_tier}} and friends (Mustache), so personalization is config,
+    //    not string-building in code. See buildPromptVariables above.
+    const variables = buildPromptVariables(context);
 
     // Model, params, provider, instructions, and any preset messages come from
     // the LD AI Config. `let` — a judge-triggered retry swaps these for the
@@ -444,7 +613,7 @@ router.post('/chat', async (req, res, next) => {
           });
           // The retry's values become the response the customer sees.
           result = retryResult;
-          ({ provider, model, parameters, tracker } = retryResolved);
+          ({ instructions, provider, model, parameters, tracker } = retryResolved);
         } catch (err) {
           logger.warn('ai_planner_retry_failed', { error: err.message });
           retryDebug = { retried: false, error: err.message };
@@ -477,6 +646,9 @@ router.post('/chat', async (req, res, next) => {
           complexity: context.complexity,
         },
         promptVariables: variables,
+        // The system prompt exactly as sent — variables already substituted, so
+        // the dev view shows the personalization rather than the template.
+        systemPrompt: instructions,
         classifier: classifierDebug,
         generation: firstGeneration,
         judge: judgeDebug,

@@ -12,9 +12,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.113.0",
     "@google/genai": "^2.13.0",
+    "@langchain/anthropic": "^1.5.2",
+    "@langchain/core": "^1.2.4",
     "@launchdarkly/node-server-sdk": "^9.10.11",
     "@launchdarkly/observability-node": "^1.1.1",
     "@launchdarkly/server-sdk-ai": "^1.2.3",
+    "@launchdarkly/server-sdk-ai-langchain": "^0.8.9",
     "better-sqlite3": "^12.10.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
@@ -22,11 +25,13 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "launchdarkly-js-client-sdk": "^3.9.1",
+    "openai": "^7.2.0",
     "playwright": "^1.60.0",
     "uuid": "^11.0.3",
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@launchdarkly/toolbar": "^2.3.1",
     "nodemon": "^3.1.9"
   },
   "engines": {

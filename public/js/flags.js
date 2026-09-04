@@ -17,6 +17,7 @@ window.LDFlags = (function () {
     'booking-flow-variant':       'standard',
     'promo-banner-text':          '',
     'ai-planner-enabled':         false,
+    'ai-planner-agent-enabled':   false,
     'atlantis-booking-enabled':   false,
     'new-checkout-flow':          false,
     'search-ranking':             'recommended',
@@ -25,6 +26,37 @@ window.LDFlags = (function () {
   // Set by Playwright load script (scripts/playwright-load.js) per browser session
   function isLoadGen() {
     return !!localStorage.getItem('tt-run-id');
+  }
+
+  function isLocalhost() {
+    return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
+  }
+
+  // ── LaunchDarkly dev toolbar ─────────────────────────────────────────────
+  // Loads the toolbar bundle out of node_modules (server.js serves the package
+  // at /vendor/ld-toolbar in dev only) and mounts it with the *same* plugin
+  // instances the client was initialized with — the toolbar can only override
+  // flags and read events through those shared instances.
+  async function mountDevToolbar({ flagOverridePlugin, eventInterceptionPlugin }, clientSideId) {
+    try {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '/vendor/ld-toolbar/cdn/toolbar.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('bundle failed to load'));
+        document.head.appendChild(script);
+      });
+      if (!window.LaunchDarklyToolbar) throw new Error('window.LaunchDarklyToolbar missing');
+      window.LaunchDarklyToolbar.init({
+        flagOverridePlugin,
+        eventInterceptionPlugin,
+        clientSideId,
+        position: 'bottom-right',
+      });
+      console.log('[LD] Dev toolbar mounted — window.ldToolbar.toggle() to hide/show');
+    } catch (err) {
+      console.warn('[LD] Dev toolbar failed to mount:', err.message);
+    }
   }
 
   // Resolve or create a stable anonymous session key
@@ -89,7 +121,7 @@ window.LDFlags = (function () {
     initPromise = (async () => {
     try {
       const res = await fetch('/api/config');
-      const { ldClientSideId } = await res.json();
+      const { ldClientSideId, devToolbar } = await res.json();
 
       if (!ldClientSideId) {
         console.warn('[LD] No client-side ID configured — using flag defaults');
@@ -138,10 +170,30 @@ window.LDFlags = (function () {
         console.log(`[LD] Session Replay plugin enabled (privacySetting: ${maskedAtInit ? 'strict, Diamond auto-mask' : 'none'})`);
       }
 
+      // Dev toolbar plugins must be constructed before the client, since they
+      // register through LDClient.initialize. Skipped for load-gen sessions.
+      let toolbarPlugins = null;
+      if (devToolbar && isLocalhost() && !isLoadGen()) {
+        try {
+          const { FlagOverridePlugin, EventInterceptionPlugin } =
+            await import('/vendor/ld-toolbar/dist/js/plugins.js');
+          toolbarPlugins = {
+            flagOverridePlugin: new FlagOverridePlugin(),
+            eventInterceptionPlugin: new EventInterceptionPlugin(),
+          };
+          plugins.push(toolbarPlugins.flagOverridePlugin, toolbarPlugins.eventInterceptionPlugin);
+          console.log('[LD] Dev toolbar plugins registered');
+        } catch (err) {
+          console.warn('[LD] Dev toolbar plugins failed to load:', err.message);
+        }
+      }
+
       ldClient = LDClient.initialize(ldClientSideId, context, { plugins });
 
       await ldClient.waitForInitialization(5);
       console.log('[LD] Client SDK initialized — flags ready');
+
+      if (toolbarPlugins) await mountDevToolbar(toolbarPlugins, ldClientSideId);
     } catch (err) {
       console.warn('[LD] Init failed — using flag defaults:', err.message);
     } finally {
