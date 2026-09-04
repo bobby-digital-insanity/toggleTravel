@@ -24,6 +24,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
  * @param {number} [opts.topP]        Optional nucleus-sampling value.
  * @param {number} [opts.topK]        Optional top-k value.
  * @param {string} [opts.model]       Override the default model.
+ * @param {AbortSignal} [opts.signal] Cancels the request.
  * @returns {Promise<{ text: string, usage: object, stopReason: string }>}
  */
 async function chat(messages, opts = {}) {
@@ -45,6 +46,8 @@ async function chat(messages, opts = {}) {
       temperature: opts.temperature ?? 0.7,
       ...(opts.topP != null ? { topP: opts.topP } : {}),
       ...(opts.topK != null ? { topK: opts.topK } : {}),
+      // Cancels the request when the client goes away (AbortController).
+      ...(opts.signal ? { abortSignal: opts.signal } : {}),
     },
   });
 

@@ -138,6 +138,14 @@
 
     /* Behind-the-scenes metadata blocks — rendered for every turn but hidden
        until dev mode is on, so toggling reveals what already happened. */
+    /* A draft the judge rejected: customers see only the replacement; the
+       developer view shows the draft struck through, so the retry is visible. */
+    .msg.rejected { display: none; }
+    .chat-window.dev-on .msg.rejected { display: flex; flex-direction: column; }
+    .msg.rejected .msg-bubble { opacity: .55; text-decoration: line-through; }
+    .msg.rejected .draft-tag { font-size: .72rem; color: #f87171; font-weight: 700; margin-top: 4px; }
+    .msg.streaming .msg-bubble::after { content: '▍'; opacity: .6; animation: blink 1s steps(2) infinite; }
+    @keyframes blink { to { opacity: 0; } }
     .msg.meta { display: none; max-width: 94%; }
     .chat-window.dev-on .msg.meta { display: flex; }
     .meta-block {
@@ -622,7 +630,9 @@
         } catch { /* leave last-known values on the banner */ }
       }
       loadConfig();
-      setInterval(loadConfig, 10000); // reflect live LD AI Config changes
+      // Reflect live LD AI Config changes. 30 s: each agent-config poll resolves
+      // all six graph configs (six evaluation events per client per tick).
+      setInterval(loadConfig, 30000);
 
       // When the nav dropdown switches users, re-evaluate immediately so the
       // banner flips to whatever the new identity resolves to (e.g. a rule like
@@ -700,34 +710,119 @@
         win.scrollTop = win.scrollHeight;
       }
 
-      // Agent mode dev view: the supervisor's plan, then one block per
-      // specialist showing which tools it actually called, then the compose
-      // step. Ordered so the plan appears before the answer and the specialist
-      // work reads top-to-bottom in the order it was dispatched.
-      function renderAgentTurn(data) {
-        const d = data.debug || {};
+      // ── Dev-view renderers ────────────────────────────────────────────
+      // Shared by the streaming (SSE) path, which renders each block as its
+      // event arrives, and the JSON fallback, which renders them all at once.
 
+      function renderRouting(d) {
         appendMeta('🔀 Routing — before the answer', [
           ['context.key', d.context?.key],
+          ['context.name', d.context?.name],
           ['context.tier', d.context?.tier, true],
+          // The tier is resolved server-side from the user store; a header
+          // that disagrees is ignored (see src/ai/context.js).
           ['tier resolved from', d.context?.tierSource === 'header' ? 'x-user-tier header (unverified key)' : (d.context?.tier ? 'server-side user store' : null)],
           ['context.anonymous', d.context?.anonymous ? 'true' : null],
           ['session.key', d.context?.session],
+          ['prompt {{user_name}}', d.promptVariables?.user_name],
+          ['prompt {{product_tier}}', d.promptVariables?.product_tier, true],
+          ['prompt {{signed_in}}', d.promptVariables ? String(!!d.promptVariables.signed_in) : null],
           ['classifier config', d.classifier?.configKey],
           ['classifier variation', fmtVariation(d.classifier)],
           ['classifier model', d.classifier?.model],
           ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
           ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
+          ['classifier tokens', fmtAnyTokens(d.classifier?.tokens)],
           ['classifier error', d.classifier?.error],
         ]);
+      }
 
-        // The team itself is LD config now: root, edges and each edge's handoff
+      // The accuracy judge — the quality gate. `r` is the retry block when one
+      // happened (the draft it rejected, and how the retry scored).
+      function renderJudge(j, r, phase) {
+        if (!j || j.skipped) return;
+        appendMeta(phase === 'retry' ? '⚖️ Judge — re-scored the retry' : '⚖️ Judge — quality gate before the reply', [
+          ['judge config', j.configKey],
+          ['judge variation', fmtVariation(j)],
+          ['metric', j.metricKey],
+          ['judge model', j.model],
+          ['score', j.score != null ? j.score.toFixed(2) + ' (threshold ' + (j.threshold ?? '?') + ')' : null],
+          ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
+          ['reasoning', j.reasoning],
+          ['recorded to LD', j.recorded ? 'yes — against the answering run' : (j.recorded === false ? 'no' : null)],
+          ['judge latency', j.durationMs != null ? j.durationMs + 'ms' : null],
+          ['judge error', j.error],
+          ['rejected draft', r && r.retried && r.draft ? '"' + r.draft.slice(0, 180) + (r.draft.length > 180 ? '…"' : '"') : null],
+          ['retried with', r && r.retried ? r.model + (r.variationKey ? ' · LD served variation ' + fmtVariation(r) : '') + ' (context.complexity forced to complex)' : null],
+          ['retry judged', r && r.judge && r.judge.score != null ? r.judge.score.toFixed(2) + ' → ' + r.judge.verdict : null, r && r.judge && r.judge.verdict === 'fail' ? 'v-fail' : (r && r.judge ? 'v-pass' : null)],
+          ['retry error', r && r.error ? r.error : null],
+        ]);
+      }
+
+      function renderGeneration(g, r, d) {
+        const final = (r && r.retried) ? r : (g || {});
+        appendMeta('🧠 Generation — after the answer', [
+          ['LD AI Config', (g && g.configKey) || 'ai-planner'],
+          // The served variation is the honest "LD made this decision"
+          // label — the SDK does not expose which rule matched.
+          ['LD served variation', fmtVariation(final), true],
+          ['context.complexity', (r && r.retried) ? 'complex (forced by judge retry)' : (d.context?.complexity || null)],
+          ['provider', final.provider],
+          ['model', final.model],
+          ['parameters', final.parameters ? JSON.stringify(final.parameters) : null],
+          ['time to first token', final.ttfMs != null ? final.ttfMs + 'ms' : null],
+          ['latency', final.durationMs != null ? final.durationMs + 'ms' : null],
+          ['tokens', fmtAnyTokens(final.tokens)],
+          ['first attempt (rejected)', (r && r.retried && g) ? g.model + ' · ' + g.durationMs + 'ms · ' + (fmtAnyTokens(g.tokens) || '') : null],
+          // The system prompt as sent — LD's template with the variables
+          // already substituted, so the personalization is visible.
+          ['system prompt (rendered)', d.systemPrompt, 'prompt-pre'],
+          ['judges attached in LD', d.judgeSource === 'none' ? 'none — no judgeConfiguration on this variation' : null, d.judgeSource === 'none' ? 'v-fail' : null],
+        ]);
+      }
+
+      // Relevance never retries: it scores whichever text actually shipped
+      // (off-topic drift and prompt injection, not fabricated data).
+      function renderRelevance(rv) {
+        if (!rv || rv.skipped) return;
+        appendMeta('🛡️ Relevance judge — scope & injection check', [
+          ['judge config', rv.configKey],
+          ['judge variation', fmtVariation(rv)],
+          ['metric', rv.metricKey],
+          ['judge model', rv.model],
+          ['score', rv.score != null ? rv.score.toFixed(2) + ' (threshold ' + (rv.threshold ?? '?') + ')' : null],
+          ['verdict', rv.verdict, rv.verdict === 'fail' ? 'v-fail' : 'v-pass'],
+          ['reasoning', rv.reasoning],
+          ['recorded to LD', rv.recorded ? 'yes — against the answering run' : null],
+          ['judge latency', rv.durationMs != null ? rv.durationMs + 'ms' : null],
+          ['judge error', rv.error],
+        ]);
+      }
+
+      // Any other judges LD attached (toxicity, sampled) — one block each.
+      function renderOtherJudges(list) {
+        (list || []).filter((j) => j.kind !== 'accuracy' && j.kind !== 'relevance').forEach((j) => {
+          appendMeta('🧪 ' + (j.configKey || 'judge') + ' judge — attached in LD' + (j.inverted ? ' (lower is better)' : ''), [
+            ['judge config', j.configKey],
+            ['judge variation', fmtVariation(j)],
+            ['metric', j.metricKey],
+            ['judge model', j.model],
+            ['score', j.score != null ? j.score.toFixed(2) + (j.threshold != null ? ' (threshold ' + j.threshold + ')' : '') : null],
+            ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
+            ['reasoning', j.reasoning],
+            ['error', j.error],
+          ]);
+        });
+      }
+
+      function renderGraph(g) {
+        // The team itself is LD config: root, edges and each edge's handoff
         // JSON come from the agent graph, so this block shows the topology the
         // turn actually ran on — change it in LD and this changes with no deploy.
-        const g = d.graph || {};
         appendMeta('🕸 Agent graph — topology from LaunchDarkly', [
           ['LD agent graph', g.key],
           ['root (supervisor)', g.root, true],
+          ['compose node', g.composeKey],
           ['nodes', g.nodes],
           ['graph run id', g.runId],
           ...(g.edges || []).map((e) => [
@@ -735,12 +830,14 @@
             [
               (e.handoff && e.handoff.label) || 'no handoff label',
               (e.handoff && e.handoff.timeoutMs ? e.handoff.timeoutMs + 'ms' : 'default timeout'),
+              (e.handoff && e.handoff.required ? 'required' : null),
               (e.handoff && e.handoff.reportFormat ? '"' + String(e.handoff.reportFormat).slice(0, 70) + '…"' : null),
             ].filter(Boolean).join(' · '),
           ]),
         ]);
+      }
 
-        const p = d.plan || {};
+      function renderPlan(p, d) {
         appendMeta('🧭 Supervisor — PLAN phase', [
           ['LD AI Config', p.configKey],
           ['LD served variation', fmtVariation(p), true],
@@ -756,44 +853,47 @@
           ['latency', p.durationMs != null ? p.durationMs + 'ms' : null],
           ['tokens', fmtAgentTokens(p.tokens)],
         ]);
+      }
 
-        (d.specialists || []).forEach((sp) => {
-          const calls = sp.toolCalls || [];
-          const counts = calls.reduce((acc, name) => { acc[name] = (acc[name] || 0) + 1; return acc; }, {});
-          const toolSummary = Object.keys(counts).map((k) => k + ' ×' + counts[k]).join(', ');
-          appendMeta('🛠 ' + sp.label + ' specialist', [
-            ['LD AI Config', sp.configKey],
-            ['LD served variation', fmtVariation(sp), true],
-            ['model', sp.model],
-            ['tools called', toolSummary || 'none'],
-            ['tool calls', calls.length || null],
-            ['latency', sp.durationMs != null ? sp.durationMs + 'ms' : null],
-            ['tokens', fmtAgentTokens(sp.tokens)],
-            ['required (LD handoff)', sp.required ? 'yes' : null],
-            ['status', sp.error ? (sp.required ? 'FAILED — required, customer told it is unverified' : 'FAILED') : 'ok', sp.error ? 'v-fail' : 'v-pass'],
-            ['error', sp.error],
-            ['findings', sp.content ? sp.content.slice(0, 400) + (sp.content.length > 400 ? '…' : '') : null],
-          ]);
-        });
+      function renderSpecialist(sp) {
+        const calls = sp.toolCalls || [];
+        const counts = calls.reduce((acc, name) => { acc[name] = (acc[name] || 0) + 1; return acc; }, {});
+        const toolSummary = Object.keys(counts).map((k) => k + ' ×' + counts[k]).join(', ');
+        appendMeta('🛠 ' + sp.label + ' specialist', [
+          ['LD AI Config', sp.configKey],
+          ['LD served variation', fmtVariation(sp), true],
+          ['model', sp.model],
+          ['tools called', toolSummary || 'none (worked from the pre-fetched catalog)'],
+          ['tool calls', calls.length || null],
+          ['latency', sp.durationMs != null ? sp.durationMs + 'ms' : null],
+          ['tokens', fmtAgentTokens(sp.tokens)],
+          ['required (LD handoff)', sp.required ? 'yes' : null],
+          ['status', sp.error ? (sp.required ? 'FAILED — required, customer told it is unverified' : 'FAILED') : 'ok', sp.error ? 'v-fail' : 'v-pass'],
+          ['error', sp.error],
+          ['findings', sp.content ? sp.content.slice(0, 400) + (sp.content.length > 400 ? '…' : '') : null],
+        ]);
+      }
 
-        appendMessage('assistant', data.reply, data.feedbackToken);
-
-        const c = d.compose || {};
-        const m = data.meta || {};
+      function renderCompose(c, m, d) {
         appendMeta('🧠 Supervisor — COMPOSE phase', [
           ['LD AI Config', c.configKey],
           ['LD served variation', fmtVariation(c), true],
           ['model', c.model],
           ['specialists consulted', (m.specialists || []).length || 0],
           ['total tool calls', m.toolCalls ?? null],
+          ['unverified (required specialist failed)', (m.unverified || []).join(', ') || null, (m.unverified || []).length ? 'v-fail' : null],
           ['compose latency', c.durationMs != null ? c.durationMs + 'ms' : null],
           ['compose tokens', fmtAgentTokens(c.tokens)],
           ['turn total', d.totalDurationMs != null ? d.totalDurationMs + 'ms' : null],
+          ['judges', d.judgeSource === 'ld' ? 'attached to the compose node in LD (run by the SDK, sampled)' : (d.judgeSource === 'default' ? 'none attached in LD — app default pair (accuracy + relevance)' : null)],
         ]);
-        (d.judges || []).forEach((j) => {
-          const title = j.configKey === 'relevance'
+      }
+
+      function renderAgentJudges(list) {
+        (list || []).forEach((j) => {
+          const title = j.kind === 'relevance'
             ? '🛡️ Relevance judge — scope & injection check'
-            : '⚖️ Judge — scored the answer';
+            : (j.kind === 'accuracy' ? '⚖️ Judge — scored the answer' : '🧪 ' + j.configKey + ' judge');
           appendMeta(title, [
             ['judge config', j.configKey],
             ['judge variation', fmtVariation(j)],
@@ -802,11 +902,35 @@
             ['score', j.score != null ? j.score.toFixed(2) + (j.threshold != null ? ' (threshold ' + j.threshold + ')' : '') : null],
             ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
             ['reasoning', j.reasoning],
-            ['sampled', j.sampled === false ? 'no — skipped by sampling' : null],
+            ['recorded to LD', j.recorded ? 'yes — against the compose run' : null],
+            ['ran by', j.ranBy === 'sdk' ? 'LD AI SDK (judgeConfiguration on the compose node)' : null],
             ['error', j.error],
           ]);
         });
+      }
 
+      // JSON fallback for agent mode — everything at once, in dispatch order.
+      function renderAgentTurn(data) {
+        const d = data.debug || {};
+        renderRouting(d);
+        if (d.graph) renderGraph(d.graph);
+        if (d.plan) renderPlan(d.plan, d);
+        (d.specialists || []).forEach(renderSpecialist);
+        appendMessage('assistant', data.reply, data.feedbackToken);
+        renderCompose(d.compose || {}, data.meta || {}, d);
+        renderAgentJudges(d.judges);
+      }
+
+      // JSON fallback for conversation mode.
+      function renderChatTurn(data) {
+        const d = data.debug || {};
+        renderRouting(d);
+        renderJudge(d.judge, d.retry, 'draft');
+        appendMessage('assistant', data.reply, data.feedbackToken);
+        history.push({ role: 'assistant', content: data.reply });
+        renderGeneration(d.generation, d.retry, d);
+        renderRelevance(d.relevance);
+        renderOtherJudges(d.judges);
       }
 
       function fmtTokens(t) {
@@ -821,11 +945,15 @@
         return o.variationKey + (o.version != null ? ' (v' + o.version + ')' : '');
       }
 
-      // Agent-mode metrics come from the LD AI SDK as LDTokenUsage
-      // ({total, input, output}), not the provider shape fmtTokens expects.
+      // Metrics from the LD AI SDK are {total, input, output}.
       function fmtAgentTokens(t) {
         if (!t) return null;
         return 'in ' + (t.input ?? '?') + ' · out ' + (t.output ?? '?') + ' · total ' + (t.total ?? '?');
+      }
+      // Either shape — provider ({inputTokens,…}) or SDK ({input,…}).
+      function fmtAnyTokens(t) {
+        if (!t) return null;
+        return (t.input != null || t.total != null) ? fmtAgentTokens(t) : fmtTokens(t);
       }
 
       function buildFeedback(token) {
@@ -852,6 +980,7 @@
       }
 
       let elapsedTimer = null;
+      let progressStage = '';
 
       function showTyping(withElapsed) {
         const wrap = document.createElement('div');
@@ -860,23 +989,29 @@
         wrap.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
         win.appendChild(wrap);
 
-        // Agent turns take tens of seconds (a supervisor plan, up to four
-        // specialists, then the compose step). Report elapsed time honestly
-        // instead of implying progress we cannot observe until the reply lands.
+        // Agent turns take tens of seconds. The progress line is driven by the
+        // server's events (plan done → running weather, budget → composing…),
+        // with the elapsed time alongside; it is never a guess.
         if (withElapsed) {
           const note = document.createElement('div');
           note.className = 'agent-progress';
           note.id = 'agent-progress';
           const started = Date.now();
+          progressStage = 'Agents starting — planning…';
           const tick = () => {
-            note.textContent = 'Agents working — planning, consulting specialists, composing… '
-              + Math.round((Date.now() - started) / 1000) + 's';
+            note.textContent = progressStage + ' ' + Math.round((Date.now() - started) / 1000) + 's';
           };
           tick();
           elapsedTimer = setInterval(tick, 1000);
           wrap.appendChild(note);
         }
         win.scrollTop = win.scrollHeight;
+      }
+
+      function setProgress(text) {
+        progressStage = text;
+        const note = document.getElementById('agent-progress');
+        if (note) note.textContent = text;
       }
 
       function hideTyping() {
@@ -889,6 +1024,144 @@
         errEl.textContent = msg;
         errEl.style.display = 'block';
         setTimeout(() => { errEl.style.display = 'none'; }, 6000);
+      }
+
+      // An assistant bubble that fills in as tokens stream. finalize() swaps in
+      // the tier highlighting and the thumbs; reject() marks it as the draft
+      // the judge threw out (visible only in the dev view).
+      function startStreamBubble() {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg assistant streaming';
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        wrap.appendChild(bubble);
+        win.appendChild(wrap);
+        let text = '';
+        return {
+          append(t) { text += t; bubble.textContent = text; win.scrollTop = win.scrollHeight; },
+          finalize(reply, token) {
+            text = reply != null ? reply : text;
+            bubble.textContent = '';
+            bubble.appendChild(tierHighlighted(text));
+            wrap.classList.remove('streaming');
+            if (token) wrap.appendChild(buildFeedback(token));
+            win.scrollTop = win.scrollHeight;
+          },
+          reject() {
+            wrap.classList.remove('streaming');
+            wrap.classList.add('rejected');
+            const tag = document.createElement('div');
+            tag.className = 'draft-tag';
+            tag.textContent = 'draft rejected by the judge — replaced below';
+            wrap.appendChild(tag);
+          },
+          get text() { return text; },
+        };
+      }
+
+      // Read a server-sent event stream from a fetch() response and dispatch
+      // (event, data) pairs. Frames are separated by a blank line.
+      async function consumeSse(res, onEvent) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            let event = 'message';
+            const dataLines = [];
+            frame.split('\n').forEach((line) => {
+              if (line.startsWith('event:')) event = line.slice(6).trim();
+              else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+            });
+            if (!dataLines.length) continue;
+            let data = {};
+            try { data = JSON.parse(dataLines.join('\n')); } catch { /* ignore malformed frame */ }
+            onEvent(event, data);
+          }
+        }
+      }
+
+      // Conversation mode over SSE: the answer streams into a bubble; the dev
+      // view blocks appear as the server reaches each step.
+      function chatStreamHandler() {
+        let stream = null;
+        let generation = null;
+        let retry = null;
+        let ctx = {};
+        return (event, data) => {
+          if (event === 'routing') { ctx = data; renderRouting(data); return; }
+          if (event === 'generation') {
+            hideTyping();
+            stream = startStreamBubble();
+            if (data.phase === 'draft') generation = data;
+            return;
+          }
+          if (event === 'chunk') { if (stream) stream.append(data.text || ''); return; }
+          if (event === 'judge') { renderJudge(data.judge, data.phase === 'retry' ? { retried: true, judge: data.judge } : null, data.phase); return; }
+          if (event === 'retry') {
+            if (stream) stream.reject();
+            retry = { retried: true, draft: data.draft };
+            showTyping(false);
+            return;
+          }
+          if (event === 'relevance') { renderRelevance(data.relevance); return; }
+          if (event === 'done') {
+            hideTyping();
+            if (!stream) stream = startStreamBubble();
+            stream.finalize(data.reply, data.feedbackToken);
+            history.push({ role: 'assistant', content: data.reply });
+            const d = data.debug || {};
+            renderGeneration(d.generation || generation, d.retry || retry, d);
+            renderOtherJudges(d.judges);
+            if (data.meta) renderBanner(data.meta);
+            return;
+          }
+          if (event === 'error') { hideTyping(); showError(data.error || 'Request failed'); }
+        };
+      }
+
+      // Agent mode over SSE: dev blocks appear per phase; the progress line
+      // under the typing indicator reports what the agents are doing.
+      function agentStreamHandler() {
+        let ctx = {};
+        const running = new Set();
+        const finished = [];
+        return (event, data) => {
+          if (event === 'routing') { ctx = data; renderRouting(data); return; }
+          if (event === 'graph') { ctx.graph = data; renderGraph(data); return; }
+          if (event === 'plan_start') { setProgress('Supervisor planning on ' + (data.model || '…') + '…'); return; }
+          if (event === 'plan') {
+            renderPlan(data, ctx);
+            setProgress('Plan done in ' + Math.round((data.durationMs || 0) / 1000) + 's → running ' + ((data.specialists || []).join(', ') || 'no specialists') + '…');
+            return;
+          }
+          if (event === 'specialist_start') { running.add(data.label || data.name); return; }
+          if (event === 'specialist') {
+            running.delete(data.label || data.name);
+            finished.push((data.label || data.name) + (data.error ? ' failed' : ' done (' + ((data.toolCalls || []).length) + ' tool call' + ((data.toolCalls || []).length === 1 ? '' : 's') + ')'));
+            renderSpecialist(data);
+            setProgress(finished.join(', ') + (running.size ? ' → waiting on ' + Array.from(running).join(', ') : '') + '…');
+            return;
+          }
+          if (event === 'compose_start') { setProgress('Specialists done → composing on ' + (data.model || '…') + '…'); return; }
+          if (event === 'judging') { setProgress('Answer composed → judging it…'); return; }
+          if (event === 'done') {
+            hideTyping();
+            const d = data.debug || {};
+            appendMessage('assistant', data.reply, data.feedbackToken);
+            renderCompose(d.compose || {}, data.meta || {}, d);
+            renderAgentJudges(d.judges);
+            if (data.meta) renderBanner(data.meta);
+            return;
+          }
+          if (event === 'error') { hideTyping(); showError(data.error || 'Request failed'); }
+        };
       }
 
       async function send(message) {
@@ -904,112 +1177,29 @@
         try {
           const res = await fetch(agentMode ? '/api/ai-planner/agent-chat' : '/api/ai-planner/chat', {
             method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            // Ask for server-sent events: tokens stream in conversation mode,
+            // progress streams in agent mode. The server answers JSON otherwise.
+            headers: authHeaders({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }),
             // Agent mode is single-turn: the supervisor re-plans each request,
             // so there is no conversation history to thread through it.
-            body: JSON.stringify(agentMode ? { message } : { message, conversationHistory: history }),
+            body: JSON.stringify(agentMode ? { message } : { message, conversationHistory: history.slice(0, -1) }),
           });
-          hideTyping();
           if (!res.ok) {
+            hideTyping();
             const data = await res.json().catch(() => ({}));
             showError(data.error || ('Request failed (' + res.status + ')'));
             return;
           }
-          const data = await res.json();
-
-          if (agentMode) {
-            renderAgentTurn(data);
-            if (data.meta) renderBanner(data.meta);
+          const type = res.headers.get('content-type') || '';
+          if (type.indexOf('text/event-stream') !== -1) {
+            await consumeSse(res, agentMode ? agentStreamHandler() : chatStreamHandler());
+            hideTyping();
             return;
           }
-
-          // Dev view — routing block goes in BEFORE the answer bubble.
-          if (data.debug) {
-            const d = data.debug;
-            appendMeta('🔀 Routing — before the answer', [
-              ['context.key', d.context?.key],
-              ['context.name', d.context?.name],
-              ['context.tier', d.context?.tier, true],
-              // The tier is resolved server-side from the user store; a header
-              // that disagrees is ignored (see src/ai/context.js).
-              ['tier resolved from', d.context?.tierSource === 'header' ? 'x-user-tier header (unverified key)' : (d.context?.tier ? 'server-side user store' : null)],
-              ['context.anonymous', d.context?.anonymous ? 'true' : null],
-              ['session.key', d.context?.session],
-              ['prompt {{user_name}}', d.promptVariables?.user_name],
-              ['prompt {{product_tier}}', d.promptVariables?.product_tier, true],
-              ['prompt {{signed_in}}', String(!!d.promptVariables?.signed_in)],
-              // The system prompt as sent — LD's template with the variables
-              // already substituted, so the personalization is visible.
-              ['system prompt (rendered)', d.systemPrompt, 'prompt-pre'],
-              ['classifier config', d.classifier?.configKey],
-              ['classifier variation', fmtVariation(d.classifier)],
-              ['classifier model', d.classifier?.model],
-              ['classifier verdict', d.classifier?.verdict || d.context?.complexity],
-              ['classifier latency', d.classifier?.durationMs != null ? d.classifier.durationMs + 'ms' : null],
-              ['classifier tokens', fmtTokens(d.classifier?.tokens)],
-              ['classifier error', d.classifier?.error],
-            ]);
-          }
-          // Dev view — judge block goes in before the final answer too (the
-          // judge scored the draft before the customer ever saw it).
-          if (data.debug && data.debug.judge && !data.debug.judge.skipped) {
-            const j = data.debug.judge;
-            const r = data.debug.retry;
-            appendMeta('⚖️ Judge — quality gate before the reply', [
-              ['judge config', j.configKey],
-              ['judge variation', fmtVariation(j)],
-              ['judge model', j.model],
-              ['score', j.score != null ? j.score.toFixed(2) + ' (threshold ' + (j.threshold ?? '?') + ')' : null],
-              ['verdict', j.verdict, j.verdict === 'fail' ? 'v-fail' : 'v-pass'],
-              ['reasoning', j.reasoning],
-              ['judge latency', j.durationMs != null ? j.durationMs + 'ms' : null],
-              ['judge error', j.error],
-              ['rejected draft', r && r.retried && r.draft ? '"' + r.draft.slice(0, 180) + (r.draft.length > 180 ? '…"' : '"') : null],
-              ['retried with', r && r.retried ? r.model + (r.variationKey ? ' · LD served variation ' + fmtVariation(r) : '') + ' (context.complexity forced to complex)' : null],
-              ['retry judged', r && r.judge && r.judge.score != null ? r.judge.score.toFixed(2) + ' → ' + r.judge.verdict : null, r && r.judge && r.judge.verdict === 'fail' ? 'v-fail' : (r && r.judge ? 'v-pass' : null)],
-              ['retry error', r && r.error ? r.error : null],
-            ]);
-          }
-          appendMessage('assistant', data.reply, data.feedbackToken);
-          history.push({ role: 'assistant', content: data.reply });
-          // Dev view — generation block goes in AFTER the answer bubble.
-          if (data.debug) {
-            const g = data.debug.generation || {};
-            const r = data.debug.retry;
-            const final = (r && r.retried) ? r : g;
-            appendMeta('🧠 Generation — after the answer', [
-              ['LD AI Config', g.configKey],
-              // The served variation is the honest "LD made this decision"
-              // label — the SDK does not expose which rule matched.
-              ['LD served variation', fmtVariation(final), true],
-              ['context.complexity', (r && r.retried) ? 'complex (forced by judge retry)' : (data.debug.context?.complexity || null)],
-              ['provider', final.provider],
-              ['model', final.model],
-              ['parameters', final.parameters ? JSON.stringify(final.parameters) : null],
-              ['latency', final.durationMs != null ? final.durationMs + 'ms' : null],
-              ['tokens', fmtTokens(final.tokens)],
-              ['stop reason', final.stopReason || (r && r.retried ? 'end_turn' : null)],
-              ['first attempt (rejected)', (r && r.retried) ? g.model + ' · ' + g.durationMs + 'ms · ' + (fmtTokens(g.tokens) || '') : null],
-            ]);
-          }
-          // Dev view — relevance judge goes in after the answer: unlike the
-          // accuracy judge it never retries, it scores whichever text actually
-          // shipped (catches off-topic drift and prompt injection, not
-          // fabricated data — that is the accuracy judge's job above).
-          if (data.debug && data.debug.relevance && !data.debug.relevance.skipped) {
-            const rv = data.debug.relevance;
-            appendMeta('🛡️ Relevance judge — scope & injection check', [
-              ['judge config', rv.configKey],
-              ['judge variation', fmtVariation(rv)],
-              ['judge model', rv.model],
-              ['score', rv.score != null ? rv.score.toFixed(2) + ' (threshold ' + (rv.threshold ?? '?') + ')' : null],
-              ['verdict', rv.verdict, rv.verdict === 'fail' ? 'v-fail' : 'v-pass'],
-              ['reasoning', rv.reasoning],
-              ['judge latency', rv.durationMs != null ? rv.durationMs + 'ms' : null],
-              ['judge error', rv.error],
-            ]);
-          }
-          if (data.meta) renderBanner(data.meta); // keep banner exact to what was used
+          hideTyping();
+          const data = await res.json();
+          if (agentMode) renderAgentTurn(data); else renderChatTurn(data);
+          if (data.meta) renderBanner(data.meta);
         } catch (err) {
           hideTyping();
           showError('Network error: ' + err.message);

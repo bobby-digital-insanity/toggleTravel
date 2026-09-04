@@ -3,7 +3,6 @@
 // Must be required before express in server.js for Observability auto-instrumentation
 const { Observability } = require('@launchdarkly/observability-node');
 const LaunchDarkly = require('@launchdarkly/node-server-sdk');
-const { initAi, LDFeedbackKind, RunnerFactory, ManagedAgent } = require('@launchdarkly/server-sdk-ai');
 const logger = require('./logger');
 
 // Initialize client synchronously on module load so the Observability plugin
@@ -12,11 +11,13 @@ const sdkKey = process.env.LD_SDK_KEY;
 let client = sdkKey
   ? LaunchDarkly.init(sdkKey, {
       plugins: [new Observability({ serviceName: 'toggle-travel' })],
+      // `name` is PII (the signed-in user's display name / email). Private
+      // attributes are still evaluated on for targeting but are redacted from
+      // the events sent to LaunchDarkly, so they never appear in the Contexts
+      // list or in event exports.
+      privateAttributes: ['name'],
     })
   : null;
-
-// AI SDK client wraps the base LD client — must come after `client` exists.
-const aiClient = client ? initAi(client) : null;
 
 async function init() {
   if (!client) {
@@ -26,8 +27,8 @@ async function init() {
   try {
     await client.waitForInitialization({ timeout: 5 });
     logger.info('ld_initialized', { message: 'LaunchDarkly server SDK ready' });
-    // Hand the same client to the new AI SDK (AgentControl), which drives agent
-    // mode's graph. Sharing the client keeps this process on one flag stream.
+    // Hand the same client to the AI SDK (AgentControl), which drives both
+    // planner modes. Sharing the client keeps this process on one flag stream.
     await require('./aiGraph').initGraphSdk(client);
   } catch (err) {
     logger.warn('ld_init_timeout', { message: 'LaunchDarkly failed to initialize — using flag defaults', error: err.message });
@@ -49,84 +50,13 @@ async function getFlagFor(key, defaultValue, context) {
   if (!context) return getFlag(key, defaultValue);
   return client.variation(key, context, defaultValue);
 }
-// AI Config (completion mode). The `ai-planner` config in LD is a completion
-// config, so we resolve it with completionConfig — model, params, and the
-// prompt messages come back already evaluated for this context.
-// `context` is a full LD context (e.g. { kind:'user', key, name, tier }) so the
-// AI Config can target/bucket on the signed-in identity — not just a session id.
-async function getCompletionConfig(key, defaultConfig, context, variables = {}) {
-  if (!aiClient) return null; // graceful degrade — route falls back to local defaults
-  return aiClient.completionConfig(key, context, defaultConfig, variables);
-}
 
-// AI Config (judge mode). Same pattern as completion configs — the judge's
-// model + evaluation rubric live in LD. `variables` fills Mustache placeholders
-// in the rubric (e.g. {{message}}, {{response}}).
-async function getJudgeConfig(key, defaultConfig, context, variables = {}) {
-  if (!aiClient) return null;
-  return aiClient.judgeConfig(key, context, defaultConfig, variables);
-}
-
-// AI Config (agent mode). Returns a ManagedAgent whose run() drives the whole
-// tool-calling loop and records metrics (tokens, duration, tool calls) against
-// the answering variation automatically.
-//
-// Note we deliberately do NOT use aiClient.createAgent(): that convenience
-// method calls RunnerFactory.createAgent(config, undefined, ...) — it passes no
-// tool registry, so every tool attached in LD would be skipped as "not found in
-// the tool registry". Resolving the config and building the runner ourselves is
-// the only way to bind our implementations to LD's tool declarations.
-//
-// The runner is pinned to the 'langchain' provider: it is the installed
-// provider that implements createAgent, and it maps LD's provider name
-// "Anthropic" onto @langchain/anthropic.
-//
-// `tools` is supplied by the caller rather than imported here: the tool modules
-// reach services that require this file, and importing them at module load
-// would form a cycle that leaves externalMockService's getFlag undefined.
-async function getAgent(key, defaultConfig, context, variables = {}, tools = {}) {
-  if (!aiClient) return null; // graceful degrade — caller falls back
-  const config = await aiClient.agentConfig(key, context, defaultConfig, variables);
-  if (!config?.enabled) {
-    logger.info('ai_agent_disabled', { config_key: key });
-    return null;
-  }
-  const runner = await RunnerFactory.createAgent(config, tools, logger, 'langchain');
-  if (!runner) {
-    logger.warn('ai_agent_runner_unavailable', { config_key: key });
-    return null;
-  }
-  return new ManagedAgent(config, runner, logger);
-}
-
-// Resolve an agent config without building a runner — for the dev view, which
-// wants to show which model/variation LD picked even when nothing runs.
-async function getAgentConfig(key, defaultConfig, context, variables = {}) {
-  if (!aiClient) return null;
-  return aiClient.agentConfig(key, context, defaultConfig, variables);
-}
-
-// Record deferred thumbs up/down feedback. The browser sends back the tracker's
-// resumptionToken (from the original /chat run); we reconstruct the tracker so
-// the feedback attributes to the same run/variation — works across PM2 workers.
-function recordFeedback(resumptionToken, context, kind = 'up') {
-  if (!aiClient || !resumptionToken) return false;
-  try {
-    const tracker = aiClient.createTracker(resumptionToken, context);
-    tracker.trackFeedback({ kind: kind === 'down' ? LDFeedbackKind.Negative : LDFeedbackKind.Positive });
-    return true;
-  } catch (err) {
-    logger.warn('ai_planner_feedback_failed', { error: err.message });
-    return false;
-  }
-}
-
-// Deferred feedback for an agent-mode (graph) run. The new AI SDK has no
-// resumption token: the compose call's trackData IS the run identity, so the
-// browser sends it back base64url-encoded and we re-emit the same feedback
-// event the old SDK's tracker would have. Works across PM2 workers for the same
-// reason the old token did — nothing is held in memory between requests.
-function recordGraphFeedback(token, context, kind = 'up') {
+// Deferred thumbs up/down for an AI run. The browser sends back the run's
+// trackData (base64url-encoded — see ai/invoke.js feedbackTokenFor) and we emit
+// the same feedback event the AI SDK would, attributed to that run and
+// variation. Works across PM2 workers: nothing is held in memory between
+// requests. One shape serves both planner modes.
+function recordFeedback(token, context, kind = 'up') {
   if (!client || !token) return false;
   try {
     const trackData = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
@@ -135,24 +65,23 @@ function recordGraphFeedback(token, context, kind = 'up') {
     client.track(event, context, trackData, 1);
     return true;
   } catch (err) {
-    logger.warn('ai_planner_graph_feedback_failed', { error: err.message });
+    logger.warn('ai_planner_feedback_failed', { error: err.message });
     return false;
   }
 }
 
-// Raw client, for the paths that talk to LaunchDarkly directly: the new AI
-// SDK's initClient(), and the graph-level $ld:ai:graph:* events in aiGraph.js.
+// Raw client, for the paths that talk to LaunchDarkly directly: the AI SDK's
+// initClient(), the graph-level $ld:ai:graph:* events in aiGraph.js, and the
+// streaming executor in ai/invoke.js.
 function getRawClient() {
   return client;
 }
 
 // Record a judge's score against the ANSWERING config's run, not the judge's.
 // This is the event LD's Monitoring tab reads for `$ld:ai:judge:*` — the same
-// shape the new AI SDK's runJudges() and the old SDK's trackJudgeResult() emit:
-// the evaluation metric key from the judge config, the answer's trackData plus
-// `judgeConfigKey`, and the score as the metric value. Used where no tracker
-// exists (agent mode's graph run), so the compose node's Monitoring shows the
-// score and the graph run is attributed too.
+// shape the AI SDK's runJudges() emits: the evaluation metric key from the
+// judge config, the answer's trackData plus `judgeConfigKey`, and the score as
+// the metric value.
 function trackJudgeScore(metricKey, context, trackData, judgeConfigKey, score) {
   if (!client || !metricKey || !trackData || typeof score !== 'number') return false;
   try {
@@ -165,7 +94,7 @@ function trackJudgeScore(metricKey, context, trackData, judgeConfigKey, score) {
 }
 
 // Variation metadata for a graph flag (variationKey + version), which the
-// graph-level events need. The new SDK keeps this internal to its own router,
+// graph-level events need. The AI SDK keeps this internal to its own router,
 // so read it off the raw flag value.
 async function getGraphMeta(key, context) {
   if (!client) return {};
@@ -196,4 +125,4 @@ function trackFor(eventName, context, data = undefined, metricValue = undefined)
   }
 }
 
-module.exports = { init, getFlag, getFlagFor, getClientSideId, track, trackFor, trackJudgeScore, getCompletionConfig, getJudgeConfig, getAgent, getAgentConfig, recordFeedback, recordGraphFeedback, getRawClient, getGraphMeta };
+module.exports = { init, getFlag, getFlagFor, getClientSideId, track, trackFor, trackJudgeScore, recordFeedback, getRawClient, getGraphMeta };

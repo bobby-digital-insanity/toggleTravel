@@ -11,11 +11,12 @@
 const OpenAI = require('openai');
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// maxRetries: 429/5xx retried with backoff by the SDK. Explicit so the policy is visible.
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 2 });
 
 /**
  * @param {Array<{role:'user'|'assistant', content:string}>} messages
- * @param {Object} [opts] system, model, maxTokens, temperature, topP
+ * @param {Object} [opts] system, model, maxTokens, temperature, topP, signal (AbortSignal)
  * @returns {Promise<{ text: string, usage: object, stopReason: string }>}
  */
 async function chat(messages, opts = {}) {
@@ -40,7 +41,7 @@ async function chat(messages, opts = {}) {
   let response, lastErr;
   for (let attempt = 0; attempt < 5 && !response; attempt++) {
     try {
-      response = await client.chat.completions.create(params);
+      response = await client.chat.completions.create(params, opts.signal ? { signal: opts.signal } : undefined);
     } catch (err) {
       lastErr = err;
       const msg = err?.message || '';

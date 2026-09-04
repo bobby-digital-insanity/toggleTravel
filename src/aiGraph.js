@@ -56,8 +56,17 @@ function loadSdk() {
         resolveGraph: server.resolveGraph,
         getClient: server.getClient,
         initClient: server.initClient,
+        inspectConfig: server.inspectConfig,
+        config: server.config,
         createHandler: server.createHandler,
         parseTemplate: server.parseTemplate,
+        parseJSONWithPossibleFences: server.parseJSONWithPossibleFences,
+        buildJudgeTasks: server.buildJudgeTasks,
+        globalRegistry: server.globalRegistry,
+        setLdSpanAttributes: server.setLdSpanAttributes,
+        setUsageSpanAttributes: server.setUsageSpanAttributes,
+        setModelIdentityAttributes: server.setModelIdentityAttributes,
+        addCachedTokensToInput: server.addCachedTokensToInput,
       };
     })().catch((err) => {
       sdkPromise = null;
@@ -206,7 +215,11 @@ function loadAgentHandler() {
           // Sonnet/Opus, higher on Haiku); harmless below it.
           middleware: [anthropicPromptCachingMiddleware({ ttl: '5m', unsupportedModelBehavior: 'ignore' })],
         });
-        const result = await agent.invoke({ messages: [new HumanMessage(userInput)] });
+        // `__signal` is the request's AbortController (client navigated away,
+        // or the turn-level timeout fired): stop the agent loop mid-flight
+        // instead of paying for the rest of it.
+        const signal = variables.__signal instanceof AbortSignal ? variables.__signal : undefined;
+        const result = await agent.invoke({ messages: [new HumanMessage(userInput)] }, signal ? { signal } : undefined);
 
         let inputTokens = 0;
         let outputTokens = 0;
@@ -242,11 +255,15 @@ function loadAgentHandler() {
  * or any referenced agent config disabled disables the whole graph, matching
  * the Python SDK.
  */
-async function resolveAgentGraph(context, variables = {}, tools = {}) {
+async function resolveAgentGraph(context, variables = {}, tools = {}, { handlers } = {}) {
   const [{ resolveGraph }, handler] = await Promise.all([loadSdk(), loadAgentHandler()]);
+  // Pass every provider handler, not just the agent one: a judge attached to a
+  // node (messages mode) is then served by its exact provider handler instead
+  // of being collapsed into an agent run.
+  const all = Array.isArray(handlers) && handlers.length ? handlers : [handler];
   const def = await resolveGraph(GRAPH_KEY, {
     context,
-    handlers: [handler],
+    handlers: all,
     toolHandlers: tools,
   });
   if (!def?.enabled) {
@@ -295,4 +312,4 @@ function createGraphRun(ldClient, context, graphMeta = {}) {
   };
 }
 
-module.exports = { GRAPH_KEY, loadSdk, initGraphSdk, instrumentTools, resolveAgentGraph, createGraphRun, extractText, renderTemplate };
+module.exports = { GRAPH_KEY, loadSdk, initGraphSdk, loadAgentHandler, instrumentTools, resolveAgentGraph, createGraphRun, extractText, renderTemplate };

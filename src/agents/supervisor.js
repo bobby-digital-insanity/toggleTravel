@@ -17,14 +17,19 @@
  * each node's AI Config, and which specialists actually run on a given turn
  * stays the supervisor's decision.
  *
- * This path runs on the new AI SDK (see `src/aiGraph.js`); conversation mode
- * still uses the older `@launchdarkly/server-sdk-ai`.
+ * Runs on the LaunchDarkly AI SDK (see `src/aiGraph.js`), like conversation
+ * mode (`src/ai/conversation.js`). `onEvent(name, data)` reports progress —
+ * plan done, each specialist starting/finishing, compose — so the page can show
+ * what the agents are doing instead of a spinner.
  */
 
 const { getRawClient, getGraphMeta, trackFor } = require('../launchdarkly');
 const { GRAPH_KEY, resolveAgentGraph, instrumentTools, createGraphRun } = require('../aiGraph');
 const { TOOL_REGISTRY } = require('../tools');
 const { userOf, describeContext } = require('../ai/context');
+const { getHandlers } = require('../ai/handlers');
+const { feedbackTokenFor } = require('../ai/invoke');
+const judges = require('../ai/judges');
 const logger = require('../logger');
 
 // Fallback only — a specialist whose edge carries no timeoutMs.
@@ -243,8 +248,9 @@ function servedVariation(node) {
 // Run one specialist node end to end. Never throws: a specialist that fails
 // becomes a finding the supervisor is told to acknowledge rather than paper
 // over. `from` makes runNode emit the graph handoff event for this edge.
-async function runSpecialist(def, root, entry, message, plan, variables, candidates) {
+async function runSpecialist(def, root, entry, message, plan, variables, candidates, onEvent = () => {}) {
   const started = Date.now();
+  onEvent('specialist_start', { name: entry.name, label: entry.label, configKey: entry.node.key, model: entry.node.config?.model?.name || null });
   const toolCalls = [];
   const timeoutMs = Number(entry.handoff?.timeoutMs) || SPECIALIST_TIMEOUT_MS;
   // `required` comes from the edge's handoff JSON in LD: a required specialist
@@ -262,7 +268,7 @@ async function runSpecialist(def, root, entry, message, plan, variables, candida
       timeoutMs,
       entry.label,
     );
-    return {
+    const finding = {
       name: entry.name,
       label: entry.label,
       configKey: entry.node.key,
@@ -274,9 +280,11 @@ async function runSpecialist(def, root, entry, message, plan, variables, candida
       tokens: usageOf(result),
       durationMs: Date.now() - started,
     };
+    onEvent('specialist', { ...finding, content: undefined });
+    return finding;
   } catch (err) {
     logger.warn('ai_agent_specialist_failed', { specialist: entry.name, config_key: entry.node.key, required, error: err.message });
-    return {
+    const finding = {
       name: entry.name,
       label: entry.label,
       configKey: entry.node.key,
@@ -287,6 +295,8 @@ async function runSpecialist(def, root, entry, message, plan, variables, candida
       error: err.message,
       durationMs: Date.now() - started,
     };
+    onEvent('specialist', finding);
+    return finding;
   }
 }
 
@@ -315,10 +325,13 @@ function buildRoster(def, root) {
  * Run one agent-mode turn.
  * @returns {Promise<{reply: string, meta: object, feedbackToken: ?string, debug: object}>}
  */
-async function runAgentTurn({ message, context, variables }) {
+async function runAgentTurn({ message, context, variables, onEvent = () => {}, signal }) {
   const startedAt = Date.now();
+  // The request's AbortController rides along in the prompt variables; the
+  // agent handler reads `__signal` and stops the LangChain loop on abort.
+  const vars = signal ? { ...variables, __signal: signal } : variables;
 
-  const def = await resolveAgentGraph(context, variables, TOOL_REGISTRY);
+  const def = await resolveAgentGraph(context, variables, TOOL_REGISTRY, { handlers: await getHandlers() });
   if (!def || !def.root) {
     const err = new Error('Agent mode is not available right now.');
     err.status = 503;
@@ -337,8 +350,14 @@ async function runAgentTurn({ message, context, variables }) {
   }
   const graphMeta = await getGraphMeta(GRAPH_KEY, context);
   const run = createGraphRun(getRawClient(), context, graphMeta);
+  onEvent('graph', {
+    key: GRAPH_KEY, root: root.key, composeKey: composeNode.key,
+    variationKey: graphMeta.variationKey || null, version: graphMeta.version || null, runId: run.trackData.runId,
+    nodes: roster.length + 2, edges: roster.map((r) => ({ key: r.edgeKey, target: r.node.key, handoff: r.handoff })),
+  });
 
   try {
+    onEvent('plan_start', { configKey: root.key, model: root.config?.model?.name || null, ...servedVariation(root) });
     // ── 1. PLAN ─────────────────────────────────────────────────────────────
     // The catalog prefetch is local JSON — run it alongside the PLAN call.
     const planToolCalls = [];
@@ -346,7 +365,7 @@ async function runAgentTurn({ message, context, variables }) {
       def.runNode(root, buildPlanPrompt(message, variables, roster), {
         // `__outputFormat` is the code-side schema; a node whose LD config
         // carries its own `outputFormat` wins (see the handler in aiGraph.js).
-        variables: { ...variables, __outputFormat: planSchema(roster) },
+        variables: { ...vars, __outputFormat: planSchema(roster) },
         toolHandlers: instrumentTools(TOOL_REGISTRY, planToolCalls),
       }),
       prefetchCandidates(),
@@ -378,15 +397,19 @@ async function runAgentTurn({ message, context, variables }) {
       durationMs: Date.now() - startedAt,
     };
 
+    onEvent('plan', planDebug);
+
     // ── 2. SPECIALISTS (parallel) ───────────────────────────────────────────
-    const findings = await Promise.all(chosen.map((entry) => runSpecialist(def, root, entry, message, plan, variables, candidates)));
+    const findings = await Promise.all(chosen.map((entry) => runSpecialist(def, root, entry, message, plan, vars, candidates, onEvent)));
 
     // ── 3. COMPOSE ──────────────────────────────────────────────────────────
     // Runs on its own node (see COMPOSE_KEY above), not a second call against
     // the root — that's what keeps PLAN and COMPOSE as two distinct boxes with
     // two distinct Monitoring histories in the LD graph UI.
     const composeStarted = Date.now();
-    const composeRun = await def.runNode(composeNode, buildComposePrompt(message, findings, variables), { variables });
+    onEvent('compose_start', { configKey: composeNode.key, model: composeNode.config?.model?.name || null, ...servedVariation(composeNode) });
+    const composePrompt = buildComposePrompt(message, findings, variables);
+    const composeRun = await def.runNode(composeNode, composePrompt, { variables: vars });
 
     const toolCallCount = findings.reduce((n, f) => n + (f.toolCalls?.length || 0), 0);
     const totalTokens = [planRun, composeRun].reduce((n, r) => n + (r.usage?.total || 0), 0)
@@ -398,6 +421,31 @@ async function runAgentTurn({ message, context, variables }) {
     run.duration(Date.now() - startedAt);
     run.tokens(totalTokens);
     run.success();
+
+    // ── 4. JUDGES ──────────────────────────────────────────────────────────
+    // When LD has judges attached to the compose node, runNode() already ran
+    // them (sampled, attributed to the compose run and the graph). Otherwise
+    // fall back to the same accuracy + relevance pair conversation mode uses,
+    // with the specialist findings as evidence so real tool data is not
+    // mistaken for a fabricated number. No retry in agent mode: the answer
+    // already came from the full fan-out.
+    onEvent('judging', { configKey: composeNode.key });
+    const ldJudges = Array.isArray(composeNode.config?.judgeConfiguration?.judges) && composeNode.config.judgeConfiguration.judges.length > 0;
+    let judgeResults;
+    let judgeSource;
+    if (ldJudges) {
+      judgeResults = judges.fromSdkResults(composeRun.judgeResults);
+      judgeSource = 'ld';
+    } else {
+      const { tasks, source } = await judges.buildTasks({
+        config: composeNode.config, context, answer: composeRun.response || '', trackData: composeRun.trackData,
+        fallbackJudges: judges.DEFAULT_AGENT_JUDGES,
+      });
+      judgeSource = source;
+      const evidence = findings.filter((f) => !f.error && f.content).map((f) => `${f.label}: ${f.content}`).join('\n\n') || null;
+      judgeResults = await judges.runTasks(tasks, { context, variables, question: message, answer: composeRun.response || '', evidence });
+    }
+    judgeResults = await judges.applyThresholds(judgeResults, context);
 
     // Custom LD metric events — how much machinery a turn actually used. Three
     // events because one event can carry only one numeric value: the LD
@@ -449,12 +497,11 @@ async function runAgentTurn({ message, context, variables }) {
         // Required specialists that failed — the answer is explicitly partial.
         unverified: findings.filter((f) => f.error && f.required).map((f) => f.name),
       },
-      // The new SDK has no resumption token; the compose call's trackData is
-      // what attributes deferred feedback to this run, so hand that back.
-      feedbackToken: Buffer.from(JSON.stringify(composeRun.trackData || {})).toString('base64url'),
-      // Same trackData, un-encoded, so the route can attribute judge scores to
-      // the compose node's run (and through graphKey, to the graph run).
+      // The compose call's trackData is what attributes deferred feedback to
+      // this run (and, through graphKey, to the graph run).
+      feedbackToken: feedbackTokenFor(composeRun.trackData),
       trackData: composeRun.trackData || null,
+      judges: judgeResults,
       debug: {
         mode: 'agent',
         context: describeContext(context),
@@ -486,6 +533,14 @@ async function runAgentTurn({ message, context, variables }) {
           tokens: usageOf(composeRun),
           durationMs: Date.now() - composeStarted,
         },
+        judgeSource,
+        judges: judgeResults.map((j) => ({
+          configKey: j.configKey, kind: j.kind, metricKey: j.metricKey || null, model: j.model || null,
+          variationKey: j.variationKey || null, version: j.version ?? null,
+          score: j.score ?? null, threshold: j.threshold ?? null, verdict: j.verdict || null,
+          reasoning: j.reasoning || null, durationMs: j.durationMs ?? null, recorded: j.recorded ?? null,
+          ranBy: j.ranBy || 'app', inverted: !!j.inverted, error: j.error || null,
+        })),
         totalDurationMs: Date.now() - startedAt,
       },
     };
