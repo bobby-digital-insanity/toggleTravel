@@ -1,15 +1,31 @@
 'use strict';
 
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 const path = require('path');
 const express = require('express');
 const router = express.Router();
+const logger = require('../logger');
+
+// Not present on every branch — each observability vendor's branch swaps in its
+// own instrumentation package. Mirrors the guard in logger.js's LDTransport.
+let LDObserve;
+let errorTracer;
+try {
+  LDObserve = require('@launchdarkly/observability-node').LDObserve;
+  errorTracer = require('@opentelemetry/api').trace.getTracer('toggletravel-demo');
+} catch (_) {
+  // Package not available on this branch — /trigger-errors reports 501
+}
 
 const SEED_SCRIPT = path.join(__dirname, '../../scripts/playwright-load.js');
 
 const VALID_BROWSERS = new Set(['chrome', 'firefox', 'safari', 'iphone', 'pixel']);
 
 let activeJob = null; // { child, startedAt, rounds, browsers }
+let errorBurstActive = false; // guards /trigger-errors against overlapping runs
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // POST /api/demo/seed — start load generation, stream output as ndjson
 router.post('/seed', (req, res) => {
@@ -111,6 +127,61 @@ router.delete('/seed', (req, res) => {
   activeJob.child.kill();
   activeJob = null;
   res.json({ cancelled: true });
+});
+
+// POST /api/demo/trigger-errors — fire a controllable number of synthetic
+// errors through LDObserve.recordError(), for exercising LD Observability
+// "Errors" alerts (e.g. Constant threshold behavior) on demand.
+// Body: { count?: number (1-500, default 1), intervalMs?: number (0-60000,
+//         default 2000, spacing between calls), dryRun?: boolean }
+router.post('/trigger-errors', async (req, res) => {
+  if (!LDObserve) {
+    return res.status(501).json({ error: 'LD Observability SDK not available on this branch' });
+  }
+  if (errorBurstActive) {
+    return res.status(409).json({ error: 'Error burst already running' });
+  }
+
+  const count = Math.min(Math.max(parseInt(req.body.count ?? '1', 10) || 1, 1), 500);
+  const intervalMs = Math.min(Math.max(parseInt(req.body.intervalMs ?? '2000', 10) || 0, 0), 60000);
+  const dryRun = req.body.dryRun === true;
+  const batchId = crypto.randomUUID();
+
+  errorBurstActive = true;
+  res.json({
+    batchId,
+    count,
+    intervalMs,
+    dryRun,
+    estimatedDurationMs: (count - 1) * intervalMs,
+  });
+
+  (async () => {
+    try {
+      for (let i = 0; i < count; i++) {
+        if (!dryRun) {
+          const err = new Error('alert_test_synthetic_error');
+          // recordError() defaults to the ambient active span (and ends it) when
+          // no span is given — inside one request handler's context, every call
+          // after the first would land on an already-ended span and be dropped.
+          // Passing a fresh span per call keeps each occurrence independent.
+          const span = errorTracer.startSpan('alert-test-error');
+          LDObserve.recordError(err, undefined, undefined, {
+            synthetic: true,
+            test: 'alert-threshold',
+            batchId,
+            index: i,
+            total: count,
+          }, { span });
+        }
+        logger.info('alert_test_error_triggered', { batchId, index: i + 1, total: count, dryRun });
+        if (i < count - 1 && intervalMs > 0) await sleep(intervalMs);
+      }
+      logger.info('alert_test_batch_complete', { batchId, total: count, dryRun });
+    } finally {
+      errorBurstActive = false;
+    }
+  })();
 });
 
 module.exports = router;
