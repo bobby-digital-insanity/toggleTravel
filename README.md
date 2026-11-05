@@ -2,6 +2,16 @@
 
 A demo travel booking app built to showcase observability tooling. The same application runs across multiple EC2 instances — each branch is instrumented with a different vendor so you can compare what each tool sees from identical traffic.
 
+## Architecture
+
+![Toggle Travel system map: browsers and the on-box traffic conductor reach Nginx, which proxies to a two-worker Express cluster backed by SQLite; the app calls LLM providers and Open-Meteo for the AI Planner and uses LaunchDarkly for flags, AI Configs, events and observability](public/images/architecture/system-map.png)
+
+Gray arrows are app traffic and external calls, blue arrows touch LaunchDarkly, and orange is the daily incident path. The server and the browser each hold their own LaunchDarkly connection, so a flag change reaches pages and API handlers at the same time without a deploy.
+
+**Daily checkout incident.** At 7am ET the traffic conductor starts a guarded rollout of `new-checkout-flow`. Treatment-arm checkouts return a 500 and send `booking-error`, and LaunchDarkly compares that arm against the control arm and rolls it back.
+
+![Checkout incident loop: conductor starts a guarded rollout, treatment checkouts throw CheckoutV2Error 500, booking-error events feed the guard, LaunchDarkly auto-rolls back, conductor re-arms for the next day](public/images/architecture/checkout-incident-loop.png)
+
 ## Stack
 
 | Layer | Technology |
